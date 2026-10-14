@@ -137,3 +137,8 @@ nav button span{font-size:.7rem;line-height:1.1}nav button{flex:1;min-width:0;pa
 .dots{display:flex;gap:6px;margin:10px 0 16px}.dots i{height:4px;flex:1;border-radius:99px;background:var(--card2)}.dots i.on{background:var(--accent)}
 hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 @media (prefers-reduced-motion:no-preference){::view-transition-group(logo),::view-transition-group(authcard){animation-duration:.6s;animation-timing-function:cubic-bezier(.2,.8,.2,1)}::view-transition-old(authcard),::view-transition-new(authcard){height:100%;overflow:clip}}
+
+/* sin zoom: solo desplazamiento; sin doble toque que amplíe; texto sin reescalado automático */
+html,body{touch-action:pan-x pan-y;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+input,select,textarea,button{touch-action:manipulation}
+input,select,textarea{font-size:16px} /* iOS no amplía al enfocar un campo con 16px o más */

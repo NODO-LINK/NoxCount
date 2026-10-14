@@ -8,5 +8,10 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NoxWidgetPlugin.class); // puente JS -> widget
         super.onCreate(savedInstanceState);
+        // sin zoom en el WebView
+        android.webkit.WebSettings ws = getBridge().getWebView().getSettings();
+        ws.setSupportZoom(false);
+        ws.setBuiltInZoomControls(false);
+        ws.setDisplayZoomControls(false);
     }
 }

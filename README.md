@@ -12,6 +12,9 @@ App web instalable (PWA) para controlar tus **ingresos y egresos**. Funciona sin
 - Filtro por fecha, PIN de bloqueo, notificaciones (pagos próximos, presupuesto excedido, resumen semanal).
 - Login (correo/contraseña o Google) y sincronización con Firebase; offline-first.
 
+## Sin zoom
+La app bloquea el zoom: etiqueta `viewport` sin escala, `touch-action: pan-x pan-y` (sin pellizco ni doble toque que amplíe), gestos de iOS bloqueados, Ctrl/Cmd + rueda y Ctrl/Cmd +/-/0 bloqueados en escritorio (`js/nozoom.js`), campos de 16 px para que iOS no amplíe al enfocar, y zoom desactivado en el WebView de Android. Nota: los lectores de pantalla y el zoom del sistema operativo siguen bajo el control del dispositivo.
+
 ## Registro obligatorio y navegación simplificada (v4)
 - **Para entrar al dashboard hay que registrarse** (correo + contraseña o Google). Si ya hay sesión, entra directo; sin conexión entra con los datos guardados de la última sesión.
 - Al iniciar sesión, el logo y la tarjeta del formulario viajan hasta el encabezado y la tarjeta del saldo (transición de elemento compartido).
