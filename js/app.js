@@ -87,11 +87,28 @@ function topbar(title, extra = '') {
 function monthNav() {
   return `<div class="mnav noprint"><button data-act="mPrev" aria-label="prev">${ico('left', 18)}</button><b>${monthName(V.ym)}</b><button data-act="mNext" aria-label="next">${ico('right', 18)}</button></div>`;
 }
+// destino de un ingreso: meta de ahorro, gastos de una categoría (apartado) u otro motivo escrito
+function purposeLabel(x) {
+  const pu = x && x.purpose; if (!pu) return '';
+  if (pu.type === 'goal') { const g = S.get().goals.find((y) => y.id === pu.id); return g ? t('pGoal', { n: g.name }) : ''; }
+  if (pu.type === 'cat') { const c = catById(pu.id); return c ? t('pCat', { n: catName(c) }) : ''; }
+  return pu.text || '';
+}
+const purposeIcon = (x) => (x.purpose && x.purpose.type === 'goal' ? 'target' : x.purpose && x.purpose.type === 'cat' ? 'tag' : 'star');
+const incomeTx = () => S.get().tx.filter((x) => x.type === 'income' && x.purpose);
+// lo que ya se apartó para una meta desde ingresos
+const goalSaved = (g) => r2(g.saved + incomeTx().filter((x) => x.purpose.type === 'goal' && x.purpose.id === g.id).reduce((a, x) => a + S.baseAmount(x), 0));
+// dinero apartado en el mes para gastos de cada categoría
+function reservedByCat(ym) {
+  const m = {};
+  for (const x of S.monthTx(ym)) if (x.type === 'income' && x.purpose && x.purpose.type === 'cat') m[x.purpose.id] = (m[x.purpose.id] || 0) + S.baseAmount(x);
+  return m;
+}
 function txRow(x) {
   const c = catById(x.categoryId), a = accById(x.accountId), b = accById(x.toAccountId);
   const title = x.type === 'transfer' ? `${accName(a)} → ${accName(b)}` : catName(c);
   return `<div class="item" data-act="editTx" data-id="${x.id}"><div class="ico">${ico(x.type === 'transfer' ? 'swap' : c ? c.icon : 'tag')}</div>
-    <div class="grow"><div class="ellip">${esc(title)}</div><div class="muted ellip" style="font-size:.8rem">${esc(x.note || '')} ${(x.tags || []).map((g) => `<span class="tag">#${esc(g)}</span>`).join('')}${x.type !== 'transfer' ? ' · ' + esc(accName(a)) : ''}</div></div>
+    <div class="grow"><div class="ellip">${esc(title)}</div><div class="muted ellip" style="font-size:.8rem">${esc(x.note || '')} ${(x.tags || []).map((g) => `<span class="tag">#${esc(g)}</span>`).join('')}${x.type !== 'transfer' ? ' · ' + esc(accName(a)) : ''}</div>${purposeLabel(x) ? `<div class="sub row" style="gap:4px;color:var(--accent)">${ico(purposeIcon(x), 13)}${esc(purposeLabel(x))}</div>` : ''}</div>
     <b class="${cls(x.type)}">${sign(x.type)}${M(x.amount, S.accCur(x.accountId))}</b></div>`;
 }
 
@@ -112,8 +129,8 @@ function dueList() {
 function availCard() {
   const t0 = S.today(), ym = t0.slice(0, 7);
   const bsum = Object.values(S.get().budgets).reduce((a, b) => a + b, 0);
-  const limit = bsum;
-  if (!limit) return '';
+  const limit = bsum + Object.values(reservedByCat(ym)).reduce((a, b) => a + b, 0);
+  if (!bsum) return '';
   const spent = S.sumTx(S.monthTx(ym), 'expense'), left = limit - spent, daysLeft = Number(S.monthEnd(ym).slice(8)) - Number(t0.slice(8)) + 1;
   return `<div class="card"><div class="row sp"><span class="muted">${t('availSpend')}</span><b>${M(Math.max(0, left))}</b></div>${bar(spent, limit)}
     <div class="sub" style="margin-top:8px">${left > 0 ? t('perDay', { a: M(left / daysLeft) }) : t('overLimit', { a: M(-left) })}</div></div>`;
@@ -155,7 +172,7 @@ function home() {
 function movesList() {
   const q = V.q.trim().toLowerCase();
   let list = S.txInRange(V.from, V.to);
-  if (q) list = list.filter((x) => { const hay = [x.note, catName(catById(x.categoryId)), ...(x.tags || []).map((g) => '#' + g), String(x.amount)].join(' ').toLowerCase(); return q.split(/\s+/).every((w) => hay.includes(w)); });
+  if (q) list = list.filter((x) => { const hay = [x.note, purposeLabel(x), catName(catById(x.categoryId)), ...(x.tags || []).map((g) => '#' + g), String(x.amount)].join(' ').toLowerCase(); return q.split(/\s+/).every((w) => hay.includes(w)); });
   let last = '';
   const rows = list.map((x) => { const h = x.date !== last ? `<div class="day">${dayName(x.date)}</div>` : ''; last = x.date; return h + txRow(x); }).join('');
   return `<div class="grid2"><div class="card"><span class="muted">${t('income')}</span><br><b class="inc">${M(S.sumTx(list, 'income'))}</b></div><div class="card"><span class="muted">${t('expense')}</span><br><b class="exp">${M(S.sumTx(list, 'expense'))}</b></div></div>
@@ -204,9 +221,16 @@ function monthReport() {
     <div class="row sp"><span>${t('income')}</span><span><b class="inc">${M(ci)}</b> <small class="muted">${cmp(ci, pi)} ${t('vs')}</small></span></div>
     <div class="row sp" style="margin-top:8px"><span>${t('expense')}</span><span><b class="exp">${M(ce)}</b> <small class="muted">${cmp(ce, pe)} ${t('vs')}</small></span></div>
     <div class="row sp" style="margin-top:8px"><span>${t('total')}</span><b>${M(ci - ce)}</b></div></div>
+  ${purposeCard(mt)}
   <h2>${t('topExp')}</h2><div class="card">${top.length ? top.map(txRow).join('') : `<span class="muted">${t('nothing')}</span>`}</div>
   <h2>${t('byTag')}</h2><div class="card">${tagRows || `<span class="muted">${t('nothing')}</span>`}</div>
   <h2>${t('byAcc')}</h2><div class="card">${accRows || `<span class="muted">${t('nothing')}</span>`}</div>`;
+}
+function purposeCard(mt) {
+  const inc = mt.filter((x) => x.type === 'income'); if (!inc.length) return '';
+  const g = {};
+  for (const x of inc) { const k = purposeLabel(x) || t('pNone'); g[k] = (g[k] || 0) + S.baseAmount(x); }
+  return `<h2>${t('byPurpose')}</h2><div class="card">${Object.entries(g).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="row sp" style="padding:4px 0"><span>${esc(k)}</span><b class="inc">${M(v)}</b></div>`).join('')}</div>`;
 }
 function yearReport() {
   const y = V.year, rows = [];
@@ -221,12 +245,12 @@ function yearReport() {
 }
 
 function budgetsCard() {
-  const s = S.get(), sp = S.spentByCategory(V.ym), ex = s.categories.filter((c) => c.type === 'expense');
-  return `<h2>${t('budgets')}</h2><div class="card">${ex.map((c) => { const b = s.budgets[c.id] || 0; return `<div class="item" data-act="editBudget" data-id="${c.id}"><div class="ico">${ico(c.icon)}</div><div class="grow">${esc(catName(c))}${b ? `<div class="row sp"><span class="muted">${M(sp[c.id] || 0)} ${t('of')} ${M(b)}</span></div>${bar(sp[c.id] || 0, b)}` : `<div class="muted" style="font-size:.8rem">${M(sp[c.id] || 0)} · ${t('add')} ${t('budget').toLowerCase()}</div>`}</div></div>`; }).join('')}</div>`;
+  const s = S.get(), sp = S.spentByCategory(V.ym), res = reservedByCat(V.ym), ex = s.categories.filter((c) => c.type === 'expense');
+  return `<h2>${t('budgets')}</h2><div class="card">${ex.map((c) => { const b = (s.budgets[c.id] || 0) + (res[c.id] || 0); return `<div class="item" data-act="editBudget" data-id="${c.id}"><div class="ico">${ico(c.icon)}</div><div class="grow">${esc(catName(c))}${b ? `<div class="row sp"><span class="muted">${M(sp[c.id] || 0)} ${t('of')} ${M(b)}</span>${res[c.id] ? `<span class="sub" style="color:var(--accent)">+${M(res[c.id])} ${t('reserved')}</span>` : ''}</div>${bar(sp[c.id] || 0, b)}` : `<div class="muted" style="font-size:.8rem">${M(sp[c.id] || 0)} · ${t('add')} ${t('budget').toLowerCase()}</div>`}</div></div>`; }).join('')}</div>`;
 }
 function goalsCard() {
   const s = S.get();
-  return `<div class="card">${s.goals.map((g) => `<div class="item" data-act="editGoal" data-id="${g.id}"><div class="ico">${ico('target')}</div><div class="grow">${progress(g.name, '', g.saved, g.target)}</div></div>`).join('') || `<span class="muted">${t('nothing')}</span>`}
+  return `<div class="card">${s.goals.map((g) => `<div class="item" data-act="editGoal" data-id="${g.id}"><div class="ico">${ico('target')}</div><div class="grow">${progress(g.name, '', goalSaved(g), g.target)}</div></div>`).join('') || `<span class="muted">${t('nothing')}</span>`}
   <button class="btn ghost" style="margin-top:10px" data-act="newGoal">+ ${t('goals')}</button></div>`;
 }
 function recurringCard() {
@@ -360,6 +384,12 @@ function parseVoice(txt) {
   return { amount: m ? parseFloat(m[1].replace(',', '.')) : null, type, cat, note: txt };
 }
 
+function purposeOptions(sel) {
+  const st = S.get(), key = sel ? (sel.type === 'other' ? 'other' : `${sel.type}:${sel.id}`) : '';
+  const o = (v, l) => `<option value="${v}" ${v === key ? 'selected' : ''}>${esc(l)}</option>`;
+  return o('', t('pNone')) + (st.goals.length ? `<optgroup label="${t('goals')}">${st.goals.map((g) => o('goal:' + g.id, t('pGoal', { n: g.name }))).join('')}</optgroup>` : '')
+    + `<optgroup label="${t('pCatGroup')}">${st.categories.filter((c) => c.type === 'expense').map((c) => o('cat:' + c.id, catName(c))).join('')}</optgroup>` + o('other', t('pOther'));
+}
 function txForm(x) {
   const s = S.get();
   const cur = x || { type: 'expense', amount: '', date: S.today(), accountId: s.accounts[0]?.id, categoryId: '', note: '', tags: [] };
@@ -372,6 +402,7 @@ function txForm(x) {
     <div id="to-wrap">${fld(t('toAccount'), `<select name="toAccountId">${opts(s.accounts, cur.toAccountId, (a) => `${accName(a)} (${a.currency || S.baseCur()})`)}</select>`)}</div>
     <div id="toamt-wrap" hidden>${fld('<span id="toamt-l"></span>', `<input name="toAmount" type="number" step="0.01" min="0" value="${cur.toAmount ?? ''}">`)}</div>
     <div id="cat-wrap">${fld(t('category'), `<select name="categoryId"></select>`)}</div>
+    <div id="purpose-wrap" hidden>${fld(t('purposeQ'), `<select name="purpose">${purposeOptions(cur.purpose)}</select>`)}<div id="purpose-text" hidden>${fld(t('pOtherText'), `<input name="purposeText" maxlength="60" value="${esc(cur.purpose && cur.purpose.type === 'other' ? cur.purpose.text : '')}">`)}</div></div>
     ${fld(t('note'), `<input name="note" value="${esc(cur.note)}">`)}
     ${fld(t('tags'), `<input name="tags" value="${esc((cur.tags || []).join(', '))}">`)}
     <img class="rcp" id="rcp" alt="" hidden>
@@ -384,6 +415,7 @@ function txForm(x) {
       const ty = f.type.value;
       $('#to-wrap', m).hidden = ty !== 'transfer';
       $('#cat-wrap', m).hidden = ty === 'transfer';
+      $('#purpose-wrap', m).hidden = ty !== 'income';
       const list = s.categories.filter((c) => c.type === ty);
       const keep = f.categoryId.value || cur.categoryId;
       f.categoryId.innerHTML = list.map((c) => `<option value="${c.id}" ${c.id === keep ? 'selected' : ''}>${esc(catName(c))}</option>`).join('');
@@ -393,6 +425,8 @@ function txForm(x) {
       if (diff) { $('#toamt-l', m).textContent = t('toAmount', { c: ct }); f.toAmount.required = true; if (!f.toAmount.value) { const a = calc(f.amount.value); if (a > 0) f.toAmount.value = Math.round(a * S.rate(cf) / S.rate(ct) * 100) / 100; } } else f.toAmount.required = false;
     };
     f.querySelectorAll('[name=type],[name=accountId],[name=toAccountId]').forEach((r) => r.addEventListener('change', sync));
+    const pv = () => { $('#purpose-text', m).hidden = f.purpose.value !== 'other'; };
+    f.purpose.addEventListener('change', pv); pv();
     sync();
     $('#amt', m).addEventListener('input', (e) => { const v = e.target.value, c = calc(v); $('#calc-prev', m).textContent = /[+\-*/x×÷]/.test(v.replace(/^-/, '')) && c === c ? `= ${c}` : t('calcHint'); });
     x && S.getReceipt(x.id).then((d) => { if (d) { const im = $('#rcp', m); im.src = d; im.hidden = false; } });
@@ -419,6 +453,12 @@ function txForm(x) {
       if (type === 'transfer' && fd.get('accountId') === fd.get('toAccountId')) return toast(t('account'));
       const rec = { id: x?.id || S.uid(), type, amount, date: fd.get('date'), accountId: fd.get('accountId'), note: fd.get('note').trim(), tags: fd.get('tags').split(',').map((g) => g.trim().replace(/^#/, '')).filter(Boolean), created: x?.created || Date.now() };
       if (x && x.debtId) rec.debtId = x.debtId;
+      if (type === 'income') {
+        const pu = fd.get('purpose') || '', tx = (fd.get('purposeText') || '').trim();
+        if (pu.startsWith('goal:')) rec.purpose = { type: 'goal', id: pu.slice(5) };
+        else if (pu.startsWith('cat:')) rec.purpose = { type: 'cat', id: pu.slice(4) };
+        else if (pu === 'other' && tx) rec.purpose = { type: 'other', text: tx };
+      }
       if (type === 'transfer') { rec.toAccountId = fd.get('toAccountId'); if (S.accCur(rec.accountId) !== S.accCur(rec.toAccountId)) rec.toAmount = Math.round(parseFloat(fd.get('toAmount')) * 100) / 100; } else rec.categoryId = fd.get('categoryId');
       const file = fd.get('receipt');
       if (file && file.size) { const data = await shrink(file); if (data && !(await S.setReceipt(rec.id, data))) toast('Sin espacio para el recibo'); }
@@ -516,7 +556,7 @@ const A = {
   encOff: () => pinPrompt(async () => { await S.disableEncryption(); render(); }),
   editBudget: (el) => { const c = catById(el.dataset.id); simpleForm(`${ico(c.icon, 22)} ${esc(catName(c))}`, fld(t('budget') + ' / ' + t('thisMonth').toLowerCase(), `<input name="v" type="number" step="0.01" min="0" value="${S.get().budgets[c.id] || ''}" placeholder="0">`), (fd) => { S.update((s) => { const v = num(fd.get('v')); v > 0 ? (s.budgets[c.id] = v) : delete s.budgets[c.id]; }); }); },
   newGoal: () => simpleForm(t('goals'), fld(t('goalName'), '<input name="n" required>') + fld(t('target'), '<input name="g" type="number" step="0.01" min="1" required>'), (fd) => { S.update((s) => s.goals.push({ id: S.uid(), name: fd.get('n').trim(), target: num(fd.get('g')), saved: 0 })); }),
-  editGoal: (el) => { const g = S.get().goals.find((x) => x.id === el.dataset.id); simpleForm(`${ico('target', 22)} ${esc(g.name)}`, fld(t('goalName'), `<input name="n" required value="${esc(g.name)}">`) + fld(t('target'), `<input name="g" type="number" step="0.01" min="1" required value="${g.target}">`) + fld(t('saved'), `<input name="sv" type="number" step="0.01" min="0" value="${g.saved}">`) + fld(t('contribute'), '<input name="add" type="number" step="0.01" placeholder="+0.00">'), (fd) => { S.update((s) => { const x = s.goals.find((y) => y.id === g.id); x.name = fd.get('n').trim(); x.target = num(fd.get('g')); x.saved = Math.max(0, num(fd.get('sv')) + num(fd.get('add'))); }); }, () => { S.update((s) => { s.goals = s.goals.filter((y) => y.id !== g.id); }); }); },
+  editGoal: (el) => { const g = S.get().goals.find((x) => x.id === el.dataset.id); simpleForm(`${ico('target', 22)} ${esc(g.name)}`, fld(t('goalName'), `<input name="n" required value="${esc(g.name)}">`) + fld(t('target'), `<input name="g" type="number" step="0.01" min="1" required value="${g.target}">`) + fld(t('saved'), `<input name="sv" type="number" step="0.01" min="0" value="${g.saved}">`) + fld(t('contribute'), '<input name="add" type="number" step="0.01" placeholder="+0.00">') + (goalSaved(g) - g.saved > 0 ? `<p class="sub">${t('fromIncome')}: ${M(goalSaved(g) - g.saved)}</p>` : ''), (fd) => { S.update((s) => { const x = s.goals.find((y) => y.id === g.id); x.name = fd.get('n').trim(); x.target = num(fd.get('g')); x.saved = Math.max(0, num(fd.get('sv')) + num(fd.get('add'))); }); }, () => { S.update((s) => { s.goals = s.goals.filter((y) => y.id !== g.id); }); }); },
   newAcc: () => accForm(), editAcc: (el) => accForm(accById(el.dataset.id)),
   debtOpen: (el) => debtView(el.dataset.id),
   payAdd: (el) => payForm(el.dataset.id),
