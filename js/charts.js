@@ -40,5 +40,5 @@ export function line(points, id = 'l') {
   const d = xy.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
   const area = d + ` L${xy[xy.length - 1][0]} ${H - 18} L${xy[0][0]} ${H - 18} Z`;
   const labels = points.map((p, i) => (i % 2 === 0 || points.length < 7 ? `<text x="${xy[i][0]}" y="${H - 4}" text-anchor="middle" class="ax">${p.label}</text>` : '')).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img"><path d="${area}" fill="var(--accent)" opacity=".15"/><path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${xy.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="var(--accent)"/><circle cx="${p[0]}" cy="${p[1]}" r="11" fill="transparent" data-chart="${id}" data-i="${i}" style="cursor:pointer"/>`).join('')}${labels}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" class="chart" role="img"><path d="${area}" fill="var(--accent)" opacity=".15"/><path class="ln" pathLength="1" d="${d}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${xy.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="var(--accent)"/><circle cx="${p[0]}" cy="${p[1]}" r="11" fill="transparent" data-chart="${id}" data-i="${i}" style="cursor:pointer"/>`).join('')}${labels}</svg>`;
 }

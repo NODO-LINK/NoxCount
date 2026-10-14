@@ -1,4 +1,5 @@
 // Estado de la app + persistencia local (offline). Los recibos se guardan aparte (solo en el dispositivo).
+import { iconName } from './icons.js';
 const KEY = 'noxcount.v1';
 const DEV = 'noxcount.device';
 
@@ -20,16 +21,22 @@ export function addPeriod(date, freq) {
 }
 
 const defCats = () => [
-  ['food', '🍽️'], ['transport', '🚌'], ['rent', '🏠'], ['services', '💡'], ['leisure', '🎮'], ['health', '🩺'], ['edu', '📚'], ['shop', '🛍️'], ['other', '📦'],
+  ['food', 'utensils'], ['transport', 'bus'], ['rent', 'home'], ['services', 'bulb'], ['leisure', 'gamepad'], ['health', 'health'], ['edu', 'book'], ['shop', 'bag'], ['other', 'box'],
 ].map(([k, icon]) => ({ id: 'e_' + k, key: 'c_' + k, icon, type: 'expense' }))
-  .concat([['salary', '💼'], ['freelance', '🧑‍💻'], ['invest', '📈'], ['other', '✨']].map(([k, icon]) => ({ id: 'i_' + k, key: 'i_' + k, icon, type: 'income' })));
+  .concat([['salary', 'briefcase'], ['freelance', 'laptop'], ['invest', 'trending'], ['other', 'sparkles']].map(([k, icon]) => ({ id: 'i_' + k, key: 'i_' + k, icon, type: 'income' })));
 
 export const defaultState = () => ({
   accounts: [{ id: 'a_cash', key: 'a_cash', kind: 'cash', initial: 0 }, { id: 'a_bank', key: 'a_bank', kind: 'bank', initial: 0 }],
   categories: defCats(), tx: [], recurring: [], budgets: {}, goals: [], debts: [], favorites: [],
-  settings: { base: 'USD', rates: {} }, updatedAt: 0,
+  settings: { base: 'USD', rates: {}, income: 0, rule: { n: 50, w: 30, s: 20 }, incomeDay: 1 }, updatedAt: 0,
 });
-const migrate = (st) => { const d = defaultState(); for (const k of ['favorites', 'settings']) if (!st[k]) st[k] = d[k]; st.settings.rates = st.settings.rates || {}; return st; };
+const migrate = (st) => {
+  const d = defaultState();
+  for (const k of ['favorites', 'settings']) if (!st[k]) st[k] = d[k];
+  st.settings = { ...d.settings, ...st.settings, rates: st.settings.rates || {}, rule: { ...d.settings.rule, ...(st.settings.rule || {}) } };
+  st.categories.forEach((c) => { c.icon = iconName(c.icon); }); // emojis antiguos -> vectores
+  return st;
+};
 
 // ---- cifrado opcional en el dispositivo (AES-GCM, clave derivada del PIN con PBKDF2) ----
 const ENC = 'noxcount.enc';

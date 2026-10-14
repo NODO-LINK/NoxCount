@@ -12,6 +12,12 @@ App web instalable (PWA) para controlar tus **ingresos y egresos**. Funciona sin
 - Filtro por fecha, PIN de bloqueo, notificaciones (pagos próximos, presupuesto excedido, resumen semanal).
 - Login (correo/contraseña o Google) y sincronización con Firebase; offline-first.
 
+## Diseño y calculadora de presupuesto (v3)
+- Íconos vectoriales SVG (`js/icons.js`) en lugar de emojis; las categorías propias eligen su ícono de una cuadrícula. Los datos antiguos con emojis se migran solos.
+- Fondo con shader WebGL (`js/shader.js`): brillo amarillo muy sutil sobre negro, a baja resolución y ~30 fps. Se pausa con la pestaña oculta y respeta "reducir movimiento" (queda un cuadro fijo).
+- Animaciones leves: entrada escalonada de tarjetas, barras y gráficos que se dibujan, saldo que "corre" al nuevo valor, hoja deslizante. Transiciones de **elemento compartido** (View Transitions): el botón "+" y las filas se transforman en el formulario.
+- **Calculadora de presupuesto** (pestaña *Plan*): escribe (o dicta) cuánto cobras al mes y reparte tu dinero en Necesidades / Deseos / Ahorro (50/30/20, 60/20/20, 40/30/30 o porcentajes propios), con el monto por categoría. "Aplicar" crea los presupuestos, una meta de ahorro anual y, si quieres, tu sueldo como ingreso mensual. Inicio muestra cuánto te queda por gastar y cuánto puedes gastar por día.
+
 ## Funciones añadidas (v2)
 - Búsqueda por texto, monto y #etiqueta · "Deshacer" al borrar · favoritos de un toque en Inicio.
 - Calculadora en el monto (`12.5*3`) · registro por voz 🎤 (navegadores con reconocimiento de voz, p. ej. Chrome).
