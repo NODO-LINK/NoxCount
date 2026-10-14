@@ -104,7 +104,7 @@ function progress(label, icon, val, max) {
 }
 function dueList() {
   const s = S.get(), lim = S.addDays(S.today(), 7), out = [];
-  s.debts.filter((d) => !d.paid && d.due && d.due <= lim).forEach((d) => out.push({ date: d.due, icon: d.dir === 'owe' ? 'up' : 'down', text: d.who, amount: d.amount }));
+  s.debts.filter((d) => debtLeft(d) > 0.005 && d.due && d.due <= lim).forEach((d) => out.push({ date: d.due, icon: d.dir === 'owe' ? 'up' : 'down', text: d.who, amount: debtLeft(d) }));
   s.recurring.filter((r) => r.next <= lim && r.type === 'expense').forEach((r) => out.push({ date: r.next, icon: 'repeat', text: r.note || catName(catById(r.categoryId)), amount: r.amount, rid: r.id }));
   return out.sort((a, b) => (a.date < b.date ? -1 : 1));
 }
@@ -234,13 +234,60 @@ function recurringCard() {
   const row = (r) => { const due = r.next <= S.today(); return `<div class="item" data-act="editRec" data-id="${r.id}"><div class="ico">${ico(catById(r.categoryId)?.icon || 'repeat')}</div><div class="grow">${esc(r.note || catName(catById(r.categoryId)))}<br><small class="muted">${t(r.freq + 'F')} · ${dayName(r.next)}${r.auto ? ' · auto' : ''}</small></div><div style="text-align:right"><b class="${cls(r.type)}">${M(r.amount)}</b>${due && !r.auto ? `<br><button class="btn sm" data-act="confirmRec" data-id="${r.id}">${t('confirm')}</button>` : ''}</div></div>`; };
   return `<h2>${t('recurring')}</h2><div class="card">${s.recurring.map(row).join('') || `<span class="muted">${t('nothing')}</span>`}<button class="btn ghost" style="margin-top:10px" data-act="newRec">+ ${t('recurring')}</button></div>`;
 }
+// pagado de una deuda: suma de abonos (según el movimiento real); si está marcada como pagada, cuenta completa
+const r2 = (n) => Math.round(n * 100) / 100;
+function debtPayments(d) {
+  return (d.payments || []).map((p) => { const x = S.get().tx.find((y) => y.id === p.txId); return { ...p, date: x ? x.date : p.date, value: x ? S.baseAmount(x) : p.amountBase }; }).sort((a, b) => (a.date < b.date ? 1 : -1));
+}
+const debtPaid = (d) => (d.paid ? d.amount : Math.min(d.amount, r2(debtPayments(d).reduce((a, p) => a + p.value, 0))));
+const debtLeft = (d) => r2(d.amount - debtPaid(d));
 function debtsCard() {
   const s = S.get();
-  const row = (d) => `<div class="item" data-act="editDebt" data-id="${d.id}"><div class="ico">${ico(d.dir === 'owe' ? 'up' : 'down')}</div><div class="grow"><span style="${d.paid ? 'text-decoration:line-through' : ''}">${esc(d.who)}</span><br><small class="muted">${d.paid ? t('paid') : d.due ? t('due') + ' ' + dayName(d.due) : t('pending')}</small></div><b class="${d.dir === 'owe' ? 'exp' : 'inc'}">${M(d.amount)}</b></div>`;
-  const tot = (dir) => s.debts.filter((d) => d.dir === dir && !d.paid).reduce((a, d) => a + d.amount, 0);
-  return `<h2>${t('debts')}</h2><div class="grid2"><div class="card"><span class="muted">${t('iOwe')}</span><br><b class="exp">${M(tot('owe'))}</b></div><div class="card"><span class="muted">${t('theyOwe')}</span><br><b class="inc">${M(tot('owed'))}</b></div></div>
+  const row = (d) => { const paid = debtPaid(d), left = debtLeft(d), done = left <= 0.005;
+    return `<div class="item" data-act="debtOpen" data-id="${d.id}"><div class="ico">${ico(d.dir === 'owe' ? 'up' : 'down')}</div><div class="grow"><div class="row sp"><span class="ellip" style="${done ? 'text-decoration:line-through' : ''}">${esc(d.who)}</span><b class="${d.dir === 'owe' ? 'exp' : 'inc'}">${M(done ? d.amount : left)}</b></div>${bar(paid, d.amount)}<small class="muted">${done ? t('paid') : `${t('paidSoFar')} ${M(paid)} · ${d.due ? t('due') + ' ' + dayName(d.due) : t('pending')}`}</small></div></div>`; };
+  const grp = (dir) => { const L = s.debts.filter((d) => d.dir === dir), total = L.reduce((a, d) => a + d.amount, 0), paid = L.reduce((a, d) => a + debtPaid(d), 0); return { total, paid, left: r2(total - paid) }; };
+  const card = (dir, label, cl) => { const g = grp(dir); return `<div class="card"><span class="muted">${label}</span><br><b class="${cl}">${M(g.left)}</b>${g.total ? `${bar(g.paid, g.total)}<div class="sub" style="margin-top:6px">${t('paidOf', { a: M(g.paid), b: M(g.total) })}</div>` : ''}</div>`; };
+  return `<h2>${t('debts')}</h2><div class="grid2">${card('owe', t('iOwe'), 'exp')}${card('owed', t('theyOwe'), 'inc')}</div>
   <div class="card" style="margin-top:12px">${s.debts.map(row).join('') || `<span class="muted">${t('nothing')}</span>`}<button class="btn ghost" style="margin-top:10px" data-act="newDebt">+ ${t('debts')}</button></div>`;
 }
+
+// detalle de una deuda: avance, abonos y acciones
+function debtView(id) {
+  const d = S.get().debts.find((x) => x.id === id); if (!d) return closeModal();
+  const paid = debtPaid(d), left = debtLeft(d), done = left <= 0.005, pays = d.paid && !(d.payments || []).length ? [] : debtPayments(d), pct = d.amount ? Math.round((paid / d.amount) * 100) : 0;
+  modal(`<div class="row sp"><h1>${ico(d.dir === 'owe' ? 'up' : 'down', 22)} ${esc(d.who)}</h1><button class="avatar" data-act="close" aria-label="${t('cancel')}">${ico('x', 18)}</button></div>
+    <div class="card"><div class="row sp"><span class="muted">${t(d.dir === 'owe' ? 'iOwe' : 'theyOwe')}</span><b>${M(d.amount)}</b></div>${bar(paid, d.amount)}
+      <div class="row sp sub" style="margin-top:6px"><span>${t('paidSoFar')}: ${M(paid)} (${pct}%)</span><span>${done ? t('settled') : `${t('remaining')}: ${M(left)}`}</span></div>${d.due ? `<div class="sub" style="margin-top:4px">${t('due')}: ${dayName(d.due)}</div>` : ''}</div>
+    <h2>${t('payments')}</h2><div class="card">${pays.map((p) => `<div class="item" data-act="payDel" data-id="${d.id}" data-pid="${p.id}"><div class="ico">${ico(d.dir === 'owe' ? 'up' : 'down')}</div><div class="grow">${dayName(p.date)}</div><b>${M(p.value)}</b><span class="chev">${ico('trash', 16)}</span></div>`).join('') || `<span class="muted">${t('nothing')}</span>`}</div>
+    ${done ? '' : `<button class="btn" data-act="payAdd" data-id="${d.id}">${ico('plus', 18)} ${t('addPay')}</button><button class="btn ghost" style="margin-top:8px" data-act="paySettle" data-id="${d.id}">${t('settle')} (${M(left)})</button>`}
+    <button class="btn ghost" style="margin-top:8px" data-act="editDebt" data-id="${d.id}">${ico('sliders', 18)} ${t('edit')}</button>`);
+}
+// formulario de abono: genera un movimiento (egreso si debes, ingreso si te deben) y mueve el saldo de la cuenta
+function payForm(id, prefill = '') {
+  const s = S.get(), d = s.debts.find((x) => x.id === id); if (!d) return;
+  const left = debtLeft(d), label = t(d.dir === 'owe' ? 'payFrom' : 'payInto');
+  modal(`<h1>${t('addPay')}</h1><p class="muted" style="margin-top:0">${esc(d.who)} · ${t('remaining')}: <b>${M(left)}</b></p><form id="pf">
+    ${fld(`${t('payAmount')} (${S.baseCur()})`, `<input name="a" id="pay-a" type="text" inputmode="decimal" autocomplete="off" required value="${prefill}" placeholder="0.00">`)}
+    ${fld(t('date'), `<input name="d" type="date" required value="${S.today()}">`)}
+    ${fld(label, `<select name="acc">${opts(s.accounts, s.accounts[0]?.id, (a) => `${accName(a)} (${a.currency || S.baseCur()})`)}</select>`)}
+    <div id="pay-err" class="exp" style="min-height:1.2em"></div>
+    <button class="btn" type="submit">${t('save')}</button><button class="btn ghost" type="button" data-act="debtOpen" data-id="${d.id}" style="margin-top:8px">${t('cancel')}</button></form>`, (m) => {
+    $('#pf', m).addEventListener('submit', (e) => {
+      e.preventDefault(); const fd = new FormData(e.target), amt = calc(fd.get('a'));
+      if (!(amt > 0)) { $('#pay-err', m).textContent = t('amount'); return; }
+      if (amt > left + 0.005) { $('#pay-err', m).textContent = t('payOver', { a: M(left) }); return; }
+      addPayment(d.id, amt, fd.get('d'), fd.get('acc'));
+      debtView(d.id);
+    });
+  });
+}
+function addPayment(did, amount, date, accId) {
+  const st = S.get(), d = st.debts.find((x) => x.id === did), type = d.dir === 'owe' ? 'expense' : 'income';
+  const cat = st.categories.find((c) => c.id === (type === 'expense' ? 'e_other' : 'i_other')) || st.categories.find((c) => c.type === type);
+  const tx = { id: S.uid(), type, amount: r2(amount / S.rate(S.accCur(accId))), date, accountId: accId, categoryId: cat && cat.id, note: t('debtNote', { n: d.who }), tags: ['deuda'], created: Date.now(), debtId: did };
+  S.update((s) => { s.tx.push(tx); const dd = s.debts.find((x) => x.id === did); (dd.payments = dd.payments || []).push({ id: S.uid(), txId: tx.id, date, amountBase: amount }); });
+}
+
 function plan() {
   const sec = V.psec || 'budget';
   const tabs = `<div class="seg">${[['budget', 'secBudget'], ['goals', 'secGoals'], ['pay', 'secPay']].map(([k, l]) => `<label><input type="radio" name="psec" value="${k}" ${sec === k ? 'checked' : ''} data-act="psec" data-id="${k}"><span>${t(l)}</span></label>`).join('')}</div>`;
@@ -371,6 +418,7 @@ function txForm(x) {
       if (!(amount > 0)) { f.amount.focus(); return toast(t('amount')); }
       if (type === 'transfer' && fd.get('accountId') === fd.get('toAccountId')) return toast(t('account'));
       const rec = { id: x?.id || S.uid(), type, amount, date: fd.get('date'), accountId: fd.get('accountId'), note: fd.get('note').trim(), tags: fd.get('tags').split(',').map((g) => g.trim().replace(/^#/, '')).filter(Boolean), created: x?.created || Date.now() };
+      if (x && x.debtId) rec.debtId = x.debtId;
       if (type === 'transfer') { rec.toAccountId = fd.get('toAccountId'); if (S.accCur(rec.accountId) !== S.accCur(rec.toAccountId)) rec.toAmount = Math.round(parseFloat(fd.get('toAmount')) * 100) / 100; } else rec.categoryId = fd.get('categoryId');
       const file = fd.get('receipt');
       if (file && file.size) { const data = await shrink(file); if (data && !(await S.setReceipt(rec.id, data))) toast('Sin espacio para el recibo'); }
@@ -442,9 +490,13 @@ const A = {
   editTx: (el) => sharedOpen(el, () => txForm(S.get().tx.find((x) => x.id === el.dataset.id))),
   delTx: (el) => {
     const old = S.get().tx.find((x) => x.id === el.dataset.id); if (!old) return;
-    S.update((s) => { s.tx = s.tx.filter((x) => x.id !== old.id); });
+    let link = null;
+    S.update((s) => {
+      s.tx = s.tx.filter((x) => x.id !== old.id);
+      s.debts.forEach((d) => { const k = (d.payments || []).find((p) => p.txId === old.id); if (k) { link = { did: d.id, k }; d.payments = d.payments.filter((p) => p !== k); } });
+    });
     closeModal();
-    toast(t('deleted'), { label: t('undo'), fn: () => S.update((s) => { s.tx.push(old); }) });
+    toast(t('deleted'), { label: t('undo'), fn: () => S.update((s) => { s.tx.push(old); if (link) { const d = s.debts.find((x) => x.id === link.did); if (d) (d.payments = d.payments || []).push(link.k); } }) });
   },
   favTx: (el) => {
     const f = S.get().favorites.find((x) => x.id === el.dataset.id); if (!f) return;
@@ -466,6 +518,15 @@ const A = {
   newGoal: () => simpleForm(t('goals'), fld(t('goalName'), '<input name="n" required>') + fld(t('target'), '<input name="g" type="number" step="0.01" min="1" required>'), (fd) => { S.update((s) => s.goals.push({ id: S.uid(), name: fd.get('n').trim(), target: num(fd.get('g')), saved: 0 })); }),
   editGoal: (el) => { const g = S.get().goals.find((x) => x.id === el.dataset.id); simpleForm(`${ico('target', 22)} ${esc(g.name)}`, fld(t('goalName'), `<input name="n" required value="${esc(g.name)}">`) + fld(t('target'), `<input name="g" type="number" step="0.01" min="1" required value="${g.target}">`) + fld(t('saved'), `<input name="sv" type="number" step="0.01" min="0" value="${g.saved}">`) + fld(t('contribute'), '<input name="add" type="number" step="0.01" placeholder="+0.00">'), (fd) => { S.update((s) => { const x = s.goals.find((y) => y.id === g.id); x.name = fd.get('n').trim(); x.target = num(fd.get('g')); x.saved = Math.max(0, num(fd.get('sv')) + num(fd.get('add'))); }); }, () => { S.update((s) => { s.goals = s.goals.filter((y) => y.id !== g.id); }); }); },
   newAcc: () => accForm(), editAcc: (el) => accForm(accById(el.dataset.id)),
+  debtOpen: (el) => debtView(el.dataset.id),
+  payAdd: (el) => payForm(el.dataset.id),
+  paySettle: (el) => { const d = S.get().debts.find((x) => x.id === el.dataset.id); payForm(el.dataset.id, d ? String(debtLeft(d)) : ''); },
+  payDel: (el) => {
+    if (!confirm(t('payDelConfirm'))) return;
+    const did = el.dataset.id, pid = el.dataset.pid;
+    S.update((st) => { const d = st.debts.find((x) => x.id === did); const p = (d.payments || []).find((x) => x.id === pid); if (!p) return; d.payments = d.payments.filter((x) => x.id !== pid); st.tx = st.tx.filter((x) => x.id !== p.txId); });
+    debtView(did);
+  },
   newDebt: () => debtForm(), editDebt: (el) => debtForm(S.get().debts.find((d) => d.id === el.dataset.id)),
   newRec: () => recForm(), editRec: (el) => recForm(S.get().recurring.find((r) => r.id === el.dataset.id)),
   confirmRec: (el) => {
@@ -516,9 +577,11 @@ function accForm(a) {
   }, a && (() => { if (S.get().tx.some((x) => x.accountId === a.id || x.toAccountId === a.id) || S.get().accounts.length < 2) { toast(t('inUse')); return false; } S.update((s) => { s.accounts = s.accounts.filter((x) => x.id !== a.id); }); }));
 }
 function debtForm(d) {
-  simpleForm(t('debts'), `<div class="seg">${['owe', 'owed'].map((k) => `<label><input type="radio" name="dir" value="${k}" ${(d?.dir || 'owe') === k ? 'checked' : ''}><span>${t(k === 'owe' ? 'iOwe' : 'theyOwe')}</span></label>`).join('')}</div>` + fld(t('who'), `<input name="w" required value="${esc(d?.who || '')}">`) + fld(t('amount'), `<input name="a" type="number" step="0.01" min="0.01" required value="${d?.amount || ''}">`) + fld(t('due'), `<input name="d" type="date" value="${d?.due || ''}">`) + `<div class="toggle"><span>${t('paid')}</span><input type="checkbox" name="p" ${d?.paid ? 'checked' : ''}></div>`, (fd) => {
-    S.update((s) => { const rec = { id: d?.id || S.uid(), dir: fd.get('dir'), who: fd.get('w').trim(), amount: num(fd.get('a')), due: fd.get('d') || '', paid: fd.get('p') === 'on' }; const i = s.debts.findIndex((x) => x.id === rec.id); i >= 0 ? (s.debts[i] = rec) : s.debts.push(rec); });
-  }, d && (() => { S.update((s) => { s.debts = s.debts.filter((x) => x.id !== d.id); }); }));
+  simpleForm(t('debts'), `<div class="seg">${['owe', 'owed'].map((k) => `<label><input type="radio" name="dir" value="${k}" ${(d?.dir || 'owe') === k ? 'checked' : ''}><span>${t(k === 'owe' ? 'iOwe' : 'theyOwe')}</span></label>`).join('')}</div>` + fld(t('who'), `<input name="w" required value="${esc(d?.who || '')}">`) + fld(t('amount'), `<input name="a" type="number" step="0.01" min="0.01" required value="${d?.amount || ''}">`) + fld(t('due'), `<input name="d" type="date" value="${d?.due || ''}">`) + `<div class="toggle"><span>${t('markPaidNoMove')}</span><input type="checkbox" name="p" ${d?.paid ? 'checked' : ''}></div>`, (fd) => {
+    const amount = num(fd.get('a')), already = d ? r2(debtPayments(d).reduce((a, p) => a + p.value, 0)) : 0;
+    if (d && amount < already) { toast(t('debtLess', { a: M(already) })); return false; }
+    S.update((s) => { const rec = { id: d?.id || S.uid(), dir: fd.get('dir'), who: fd.get('w').trim(), amount, due: fd.get('d') || '', paid: fd.get('p') === 'on', payments: d?.payments || [] }; const i = s.debts.findIndex((x) => x.id === rec.id); i >= 0 ? (s.debts[i] = rec) : s.debts.push(rec); });
+  }, d && (() => { S.update((s) => { s.debts = s.debts.filter((x) => x.id !== d.id); s.tx.forEach((x) => { if (x.debtId === d.id) delete x.debtId; }); }); }));
 }
 function catForm(c, type) {
   const cur = c ? iconName(c.icon) : 'tag';
