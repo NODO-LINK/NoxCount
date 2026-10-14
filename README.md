@@ -50,15 +50,7 @@ Abre http://localhost:8080. En el celular, "Agregar a pantalla de inicio" para i
 1. Crea un proyecto en https://console.firebase.google.com y agrega una app **Web**.
 2. Activa **Authentication** (Correo/contraseña y Google) y **Firestore**.
 3. Pega la configuración en `firebase-config.js` (`window.NOX_FIREBASE = {...}`).
-4. Reglas de Firestore para que cada usuario solo vea sus datos:
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{db}/documents {
-    match /users/{uid} { allow read, write: if request.auth != null && request.auth.uid == uid; }
-  }
-}
-```
+4. Reglas de Firestore: copia el contenido de [`firestore.rules`](firestore.rules) en Firestore → Reglas → Publicar (cada usuario solo puede leer y escribir `users/{su uid}`, con validación de formato y tamaño).
 5. Agrega tu dominio en Authentication → Configuración → Dominios autorizados.
 
 ## Notas

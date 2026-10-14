@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Cada usuario solo accede a SU documento
+    match /users/{uid} {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['data', 'updatedAt'])
+        && request.resource.data.data is string
+        && request.resource.data.data.size() < 900000   // Firestore limita a ~1 MB por documento
+        && request.resource.data.updatedAt is number;
+    }
+
+    // Todo lo demás, bloqueado
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
