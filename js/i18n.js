@@ -5,6 +5,14 @@ const D = {
     thisMonth: 'Este mes', budgets: 'Presupuestos', goals: 'Metas de ahorro', upcoming: 'Próximos pagos',
     weekly: 'Resumen semanal', weeklyText: 'Últimos 7 días: gastaste {a} ({d} vs. los 7 anteriores).',
     weeklyShort: 'Resumen semanal: gastaste {a} en los últimos 7 días.',
+    search: 'Buscar texto, monto o #etiqueta', undo: 'Deshacer', deleted: 'Movimiento eliminado', currency: 'Moneda', baseCur: 'Moneda base', rates: 'Tipos de cambio',
+    rateHelp: '1 {c} = ? {b}', toAmount: 'Monto recibido ({c})', byTag: 'Gastos por etiqueta', byAcc: 'Por cuenta', projection: 'Proyección de fin de mes',
+    projText: 'Al ritmo actual cerrarías el mes con {a} de egresos.', dailyAvg: 'Gasto diario promedio (30 días)', daysLeft: 'Días que te alcanza el saldo', days: 'días',
+    annual: 'Anual', monthly: 'Mensual', year: 'Año', net: 'Ahorro', topExp: 'Mayores gastos del mes', favorites: 'Favoritos', favAdd: 'Nuevo favorito', favRegistered: 'Registrado: {n}',
+    favHint: 'Toca un favorito en Inicio para registrarlo hoy.', calcHint: 'Puedes escribir operaciones: 12.5*3', voice: 'Dictar', voiceNo: 'Tu navegador no soporta voz.', voiceHeard: 'Entendí: {s}', voiceFail: 'No entendí. Prueba: "gasté 20 en comida".',
+    remind: 'Recordatorio diario', remindAt: 'Hora del recordatorio', remindText: 'No olvides registrar tus gastos de hoy 📝', hide: 'Ocultar saldos',
+    bio: 'Huella / Face ID', bioSet: 'Activar huella / Face ID', bioRemove: 'Quitar huella / Face ID', bioFail: 'No se pudo usar la huella.', bioUse: 'Usar huella / Face ID',
+    encrypt: 'Cifrar datos en el dispositivo', encOn: 'Activar cifrado', encOff: 'Desactivar cifrado', encWarn: 'Si olvidas tu PIN, los datos cifrados NO se pueden recuperar. Con el cifrado activo, el PIN es obligatorio y la huella se desactiva.', needPin: 'Primero define un PIN.', encActive: 'Cifrado activo ✅', encLocked: 'Con cifrado activo no se puede cambiar el PIN: desactiva el cifrado primero.', widgetNote: 'Widget de Android disponible en la app nativa.', tag: 'Etiqueta', all: 'Todo',
     nothing: 'Nada por aquí todavía.', add: 'Agregar', save: 'Guardar', cancel: 'Cancelar', delete: 'Eliminar', edit: 'Editar',
     amount: 'Monto', date: 'Fecha', account: 'Cuenta', toAccount: 'Cuenta destino', category: 'Categoría', note: 'Nota',
     tags: 'Etiquetas (separadas por coma)', receipt: 'Foto del recibo', newMove: 'Nuevo movimiento', editMove: 'Editar movimiento',
@@ -31,6 +39,14 @@ const D = {
     thisMonth: 'This month', budgets: 'Budgets', goals: 'Savings goals', upcoming: 'Upcoming payments',
     weekly: 'Weekly summary', weeklyText: 'Last 7 days: you spent {a} ({d} vs. the previous 7).',
     weeklyShort: 'Weekly summary: you spent {a} in the last 7 days.',
+    search: 'Search text, amount or #tag', undo: 'Undo', deleted: 'Transaction deleted', currency: 'Currency', baseCur: 'Base currency', rates: 'Exchange rates',
+    rateHelp: '1 {c} = ? {b}', toAmount: 'Amount received ({c})', byTag: 'Spending by tag', byAcc: 'By account', projection: 'End-of-month projection',
+    projText: 'At the current pace you would end the month with {a} in expenses.', dailyAvg: 'Average daily spending (30 days)', daysLeft: 'Days your balance lasts', days: 'days',
+    annual: 'Yearly', monthly: 'Monthly', year: 'Year', net: 'Savings', topExp: 'Biggest expenses this month', favorites: 'Favorites', favAdd: 'New favorite', favRegistered: 'Recorded: {n}',
+    favHint: 'Tap a favorite on Home to record it today.', calcHint: 'You can type operations: 12.5*3', voice: 'Dictate', voiceNo: 'Your browser does not support voice.', voiceHeard: 'Heard: {s}', voiceFail: 'Could not understand. Try: "spent 20 on food".',
+    remind: 'Daily reminder', remindAt: 'Reminder time', remindText: "Don't forget to log today's expenses 📝", hide: 'Hide balances',
+    bio: 'Fingerprint / Face ID', bioSet: 'Enable fingerprint / Face ID', bioRemove: 'Remove fingerprint / Face ID', bioFail: 'Could not use biometrics.', bioUse: 'Use fingerprint / Face ID',
+    encrypt: 'Encrypt data on this device', encOn: 'Enable encryption', encOff: 'Disable encryption', encWarn: 'If you forget your PIN, encrypted data CANNOT be recovered. With encryption on, the PIN is mandatory and biometrics are disabled.', needPin: 'Set a PIN first.', encActive: 'Encryption active ✅', encLocked: 'You cannot change the PIN while encryption is on: disable encryption first.', widgetNote: 'Android widget available in the native app.', tag: 'Tag', all: 'All',
     nothing: 'Nothing here yet.', add: 'Add', save: 'Save', cancel: 'Cancel', delete: 'Delete', edit: 'Edit',
     amount: 'Amount', date: 'Date', account: 'Account', toAccount: 'To account', category: 'Category', note: 'Note',
     tags: 'Tags (comma separated)', receipt: 'Receipt photo', newMove: 'New transaction', editMove: 'Edit transaction',
@@ -60,7 +76,7 @@ export const t = (k, v) => {
   if (v) for (const x in v) s = s.replace('{' + x + '}', v[x]);
   return s;
 };
-export const money = (n) => new Intl.NumberFormat(lang === 'es' ? 'es-US' : 'en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
+export const money = (n, cur = "USD") => { try { return new Intl.NumberFormat(lang === "es" ? "es-US" : "en-US", { style: "currency", currency: cur }).format(n || 0); } catch { return (n || 0).toFixed(2) + " " + cur; } };
 export const monthName = (ym) => {
   const [y, m] = ym.split('-').map(Number);
   return new Intl.DateTimeFormat(lang === 'es' ? 'es' : 'en', { month: 'long', year: 'numeric' }).format(new Date(y, m - 1, 1));

@@ -40,3 +40,9 @@ label{font-size:.8rem;color:var(--muted)}
 .toggle{display:flex;justify-content:space-between;align-items:center;padding:10px 0}.toggle input{width:auto;margin:0;transform:scale(1.3)}
 .rcp{max-width:100%;border-radius:12px;margin-bottom:10px}
 @media print{body{background:#fff;color:#000}nav,.noprint,#toast,.mnav button{display:none!important}.card{background:#fff;border:1px solid #ddd}:root{--text:#000;--muted:#555;--card2:#eee;--line:#ddd}}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:0 0 12px;margin:0 -2px}
+.chip{flex:none;background:var(--card);border:1px solid var(--line);border-radius:99px;padding:8px 14px;white-space:nowrap}
+.eye{background:none;border:0;font-size:1.4rem;padding:6px}
+.detail{min-height:1.2em;margin-top:8px;font-size:.85rem}
+input[type=search]{margin-top:0}
+#toast .btn{display:inline-block;vertical-align:middle}

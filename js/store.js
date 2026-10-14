@@ -26,19 +26,61 @@ const defCats = () => [
 
 export const defaultState = () => ({
   accounts: [{ id: 'a_cash', key: 'a_cash', kind: 'cash', initial: 0 }, { id: 'a_bank', key: 'a_bank', kind: 'bank', initial: 0 }],
-  categories: defCats(), tx: [], recurring: [], budgets: {}, goals: [], debts: [], updatedAt: 0,
+  categories: defCats(), tx: [], recurring: [], budgets: {}, goals: [], debts: [], favorites: [],
+  settings: { base: 'USD', rates: {} }, updatedAt: 0,
 });
+const migrate = (st) => { const d = defaultState(); for (const k of ['favorites', 'settings']) if (!st[k]) st[k] = d[k]; st.settings.rates = st.settings.rates || {}; return st; };
+
+// ---- cifrado opcional en el dispositivo (AES-GCM, clave derivada del PIN con PBKDF2) ----
+const ENC = 'noxcount.enc';
+const b64 = (u8) => btoa(String.fromCharCode(...u8));
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+let cryptoKey = null, salt = null, chain = Promise.resolve();
+async function derive(pin, saltBytes) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: saltBytes, iterations: 200000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function encStr(text) { const iv = crypto.getRandomValues(new Uint8Array(12)); const c = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, new TextEncoder().encode(text))); return b64(iv) + '.' + b64(c); }
+async function decStr(str, key = cryptoKey) { const [iv, c] = str.split('.'); return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(iv) }, key, unb64(c))); }
 
 let state;
-try { state = JSON.parse(localStorage.getItem(KEY)) || defaultState(); } catch { state = defaultState(); }
+const readPlain = () => { try { return migrate(JSON.parse(localStorage.getItem(KEY)) || defaultState()); } catch { return defaultState(); } };
+export const isEncrypted = () => !!localStorage.getItem(ENC);
+export const isLocked = () => isEncrypted() && !cryptoKey;
+state = isEncrypted() ? defaultState() : readPlain(); // si está cifrado, se carga al desbloquear
 const subs = new Set();
 let saveHook = null;
 export const get = () => state;
 export const subscribe = (f) => subs.add(f);
 export const onSave = (f) => { saveHook = f; };
-function persist() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { console.warn('No se pudo guardar', e); } }
+function persist() {
+  if (cryptoKey) {
+    const snap = JSON.stringify(state);
+    chain = chain.then(async () => { const [iv, c] = (await encStr(snap)).split('.'); localStorage.setItem(ENC, JSON.stringify({ salt: b64(salt), iv, c })); }).catch((e) => console.warn(e));
+    return;
+  }
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { console.warn('No se pudo guardar', e); }
+}
+export async function unlock(pin) {
+  try {
+    const box = JSON.parse(localStorage.getItem(ENC)), sl = unb64(box.salt), k = await derive(pin, sl);
+    const st = migrate(JSON.parse(await decStr(box.iv + '.' + box.c, k)));
+    cryptoKey = k; salt = sl; state = st; subs.forEach((f) => f(state)); return true;
+  } catch { return false; }
+}
+export async function enableEncryption(pin) {
+  salt = crypto.getRandomValues(new Uint8Array(16)); cryptoKey = await derive(pin, salt);
+  const keys = Object.keys(localStorage).filter((k) => k.startsWith('noxcount.r.'));
+  for (const k of keys) { const v = localStorage.getItem(k); if (!v.startsWith('enc:')) localStorage.setItem(k, 'enc:' + (await encStr(v))); }
+  persist(); await chain; localStorage.removeItem(KEY);
+}
+export async function disableEncryption() {
+  const keys = Object.keys(localStorage).filter((k) => k.startsWith('noxcount.r.'));
+  for (const k of keys) { const v = localStorage.getItem(k); if (v.startsWith('enc:')) localStorage.setItem(k, await decStr(v.slice(4))); }
+  localStorage.setItem(KEY, JSON.stringify(state)); localStorage.removeItem(ENC); cryptoKey = null; salt = null;
+}
 export function update(fn) { fn(state); state.updatedAt = Date.now(); persist(); subs.forEach((f) => f(state)); if (saveHook) saveHook(state); }
-export function replace(s) { state = s; persist(); subs.forEach((f) => f(state)); }
+export function replace(s) { state = migrate(s); persist(); subs.forEach((f) => f(state)); }
 export function reset() { state = defaultState(); state.updatedAt = Date.now(); persist(); Object.keys(localStorage).filter((k) => k.startsWith('noxcount.r.')).forEach((k) => localStorage.removeItem(k)); subs.forEach((f) => f(state)); if (saveHook) saveHook(state); }
 
 // ajustes del dispositivo (idioma, PIN, notificaciones)
@@ -46,30 +88,41 @@ const dev = (() => { try { return JSON.parse(localStorage.getItem(DEV)) || {}; }
 export const device = () => dev;
 export const setDevice = (patch) => { Object.assign(dev, patch); try { localStorage.setItem(DEV, JSON.stringify(dev)); } catch {} };
 
-// recibos (solo locales)
-export const getReceipt = (id) => { try { return localStorage.getItem('noxcount.r.' + id); } catch { return null; } };
-export const setReceipt = (id, data) => { try { data ? localStorage.setItem('noxcount.r.' + id, data) : localStorage.removeItem('noxcount.r.' + id); } catch { return false; } return true; };
+// recibos (solo locales; cifrados si el cifrado está activo)
+export async function getReceipt(id) {
+  try { const v = localStorage.getItem('noxcount.r.' + id); if (!v) return null; return v.startsWith('enc:') ? await decStr(v.slice(4)) : v; } catch { return null; }
+}
+export async function setReceipt(id, data) {
+  try { if (!data) localStorage.removeItem('noxcount.r.' + id); else localStorage.setItem('noxcount.r.' + id, cryptoKey ? 'enc:' + (await encStr(data)) : data); } catch { return false; }
+  return true;
+}
 
-// cálculos
-export const sumTx = (list, type) => list.filter((x) => x.type === type).reduce((a, x) => a + x.amount, 0);
+// monedas: cada cuenta tiene su moneda; los totales se convierten a la moneda base (settings.base)
+export const baseCur = () => state.settings.base || 'USD';
+export const rate = (cur) => (!cur || cur === baseCur() ? 1 : Number(state.settings.rates[cur]) || 1); // 1 {cur} = rate {base}
+export const accCur = (id) => (state.accounts.find((a) => a.id === id)?.currency) || baseCur();
+export const toBase = (amount, cur) => amount * rate(cur);
+const txBase = (x) => toBase(x.amount, accCur(x.accountId));
+export const sumTx = (list, type) => Math.round(list.filter((x) => x.type === type).reduce((a, x) => a + txBase(x), 0) * 100) / 100;
 export function accountBalance(a, upTo) {
   let b = a.initial || 0;
   for (const x of state.tx) {
     if (upTo && x.date > upTo) continue;
     if (x.type === 'income' && x.accountId === a.id) b += x.amount;
     else if (x.type === 'expense' && x.accountId === a.id) b -= x.amount;
-    else if (x.type === 'transfer') { if (x.accountId === a.id) b -= x.amount; if (x.toAccountId === a.id) b += x.amount; }
+    else if (x.type === 'transfer') { if (x.accountId === a.id) b -= x.amount; if (x.toAccountId === a.id) b += x.toAmount ?? x.amount; }
   }
   return Math.round(b * 100) / 100;
 }
-export const totalBalance = (upTo) => Math.round(state.accounts.reduce((s, a) => s + accountBalance(a, upTo), 0) * 100) / 100;
+export const totalBalance = (upTo) => Math.round(state.accounts.reduce((s, a) => s + toBase(accountBalance(a, upTo), a.currency), 0) * 100) / 100;
 export const txInRange = (from, to) => state.tx.filter((x) => x.date >= from && x.date <= to).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.created - a.created));
 export const monthTx = (ym) => txInRange(ym + '-01', monthEnd(ym));
 export function spentByCategory(ym) {
   const m = {};
-  for (const x of monthTx(ym)) if (x.type === 'expense') m[x.categoryId] = (m[x.categoryId] || 0) + x.amount;
+  for (const x of monthTx(ym)) if (x.type === 'expense') m[x.categoryId] = (m[x.categoryId] || 0) + txBase(x);
   return m;
 }
+export const baseAmount = txBase;
 
 // movimientos recurrentes: los automáticos se registran solos hasta hoy
 export function runRecurring() {
