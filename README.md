@@ -16,12 +16,12 @@ App web instalable (PWA) para controlar tus **ingresos y egresos**. Funciona sin
 - **Para entrar al dashboard hay que registrarse** (correo + contraseña o Google). Si ya hay sesión, entra directo; sin conexión entra con los datos guardados de la última sesión.
 - Al iniciar sesión, el logo y la tarjeta del formulario viajan hasta el encabezado y la tarjeta del saldo (transición de elemento compartido).
 - Los datos que alguien ya tenía en el dispositivo antes de registrarse se pasan a su cuenta. Cerrar sesión borra los datos locales (siguen en la nube).
-- **Guía inicial de 3 pasos** tras el primer registro: cuánto cobras → cuánto tienes en cada cuenta → plan 50/30/20 aplicado.
+- **Guía inicial** tras el primer registro: cuánto tienes ahora en cada cuenta.
 - **Dónde está cada cosa**
   - *Inicio*: saldo, disponible para gastar, ingresos/egresos del mes, favoritos y últimos movimientos.
   - *Movimientos*: lista, búsqueda y filtro por fecha.
   - *+*: nuevo movimiento (monto, voz, recibo).
-  - *Planificar*: **Presupuesto** (calculadora por ingreso mensual y presupuestos por categoría) · **Metas** · **Pagos y deudas** (recurrentes y deudas).
+  - *Planificar*: **Presupuesto** (límite mensual por categoría) · **Metas** · **Pagos y deudas** (recurrentes y deudas).
   - *Reportes*: resumen, proyección, gráficos, mensual/anual y PDF.
   - *Perfil* (botón arriba a la derecha): **Mi dinero** (cuentas, categorías, favoritos) y **Ajustes** en 4 secciones: Cuenta · Seguridad · Preferencias · Datos.
 
@@ -29,7 +29,6 @@ App web instalable (PWA) para controlar tus **ingresos y egresos**. Funciona sin
 - Íconos vectoriales SVG (`js/icons.js`) en lugar de emojis; las categorías propias eligen su ícono de una cuadrícula. Los datos antiguos con emojis se migran solos.
 - Fondo con shader WebGL (`js/shader.js`): brillo amarillo muy sutil sobre negro, a baja resolución y ~30 fps. Se pausa con la pestaña oculta y respeta "reducir movimiento" (queda un cuadro fijo).
 - Animaciones leves: entrada escalonada de tarjetas, barras y gráficos que se dibujan, saldo que "corre" al nuevo valor, hoja deslizante. Transiciones de **elemento compartido** (View Transitions): el botón "+" y las filas se transforman en el formulario.
-- **Calculadora de presupuesto** (pestaña *Plan*): escribe (o dicta) cuánto cobras al mes y reparte tu dinero en Necesidades / Deseos / Ahorro (50/30/20, 60/20/20, 40/30/30 o porcentajes propios), con el monto por categoría. "Aplicar" crea los presupuestos, una meta de ahorro anual y, si quieres, tu sueldo como ingreso mensual. Inicio muestra cuánto te queda por gastar y cuánto puedes gastar por día.
 
 ## Funciones añadidas (v2)
 - Búsqueda por texto, monto y #etiqueta · "Deshacer" al borrar · favoritos de un toque en Inicio.

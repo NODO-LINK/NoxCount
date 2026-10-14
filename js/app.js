@@ -110,9 +110,9 @@ function dueList() {
 }
 
 function availCard() {
-  const st = S.get().settings, t0 = S.today(), ym = t0.slice(0, 7);
+  const t0 = S.today(), ym = t0.slice(0, 7);
   const bsum = Object.values(S.get().budgets).reduce((a, b) => a + b, 0);
-  const limit = bsum > 0 ? bsum : st.income > 0 ? st.income * (st.rule.n + st.rule.w) / 100 : 0;
+  const limit = bsum;
   if (!limit) return '';
   const spent = S.sumTx(S.monthTx(ym), 'expense'), left = limit - spent, daysLeft = Number(S.monthEnd(ym).slice(8)) - Number(t0.slice(8)) + 1;
   return `<div class="card"><div class="row sp"><span class="muted">${t('availSpend')}</span><b>${M(Math.max(0, left))}</b></div>${bar(spent, limit)}
@@ -220,38 +220,6 @@ function yearReport() {
   <div class="card">${rows.map((r) => `<div class="row sp" style="padding:5px 0;border-bottom:1px solid var(--line)"><span style="text-transform:capitalize">${monthName(r.ym).split(' ')[0]}</span><span><span class="inc">${M(r.inc)}</span> · <span class="exp">${M(r.exp)}</span> · <b>${M(r.net)}</b></span></div>`).join('')}</div>`;
 }
 
-// ---------- calculadora de presupuesto: "cuánto cobras" -> reparto por categoría ----------
-const NEEDS = { e_rent: 0.38, e_food: 0.27, e_transport: 0.13, e_services: 0.14, e_health: 0.08 };
-const WANTS = { e_leisure: 0.35, e_shop: 0.35, e_edu: 0.15, e_other: 0.15 };
-const RULES = { bal: [50, 30, 20, 'ruleBal'], high: [60, 20, 20, 'ruleHigh'], save: [40, 30, 30, 'ruleSave'] };
-function planCalc(income, rule) {
-  const cats = S.get().categories.filter((c) => c.type === 'expense');
-  const split = (list, base, total) => { const sw = list.reduce((a, c) => a + (base[c.id] ?? 0.1), 0) || 1; return list.map((c) => ({ id: c.id, amount: Math.round(total * (base[c.id] ?? 0.1) / sw) })); };
-  const nT = income * rule.n / 100, wT = income * rule.w / 100, sT = income * rule.s / 100;
-  return { needs: { total: nT, items: split(cats.filter((c) => NEEDS[c.id]), NEEDS, nT) }, wants: { total: wT, items: split(cats.filter((c) => !NEEDS[c.id]), WANTS, wT) }, savings: sT };
-}
-const ruleKey = (r) => Object.entries(RULES).find(([, v]) => v[0] === r.n && v[1] === r.w && v[2] === r.s)?.[0] || 'custom';
-function planPreview(income) {
-  const r = S.get().settings.rule;
-  if (!(income > 0)) return `<div class="muted" style="margin:10px 0">${t('planHint')}</div>`;
-  const c = planCalc(income, r), row = (cls2, label, pct, amt, items) => `<div class="legend2"><div class="row sp"><span class="row" style="gap:8px"><i class="sw ${cls2}"></i><b>${label}</b> <span class="muted">${pct}%</span></span><b>${M(amt)}</b></div>${(items || []).map((i) => `<div class="row sp sub"><span class="row" style="gap:6px">${ico(catById(i.id)?.icon, 14)}${esc(catName(catById(i.id)))}</span><span>${M(i.amount)}</span></div>`).join('')}</div>`;
-  return `<div class="split"><i class="s1" style="width:${r.n}%"></i><i class="s2" style="width:${r.w}%"></i><i class="s3" style="width:${r.s}%"></i></div>
-    ${row('s1', t('needs'), r.n, c.needs.total, c.needs.items)}${row('s2', t('wants'), r.w, c.wants.total, c.wants.items)}${row('s3', t('savingsG'), r.s, c.savings)}`;
-}
-function planCalcCard() {
-  const s = S.get(), st = s.settings, k = V.customRule ? 'custom' : ruleKey(st.rule), inc = V.planIncome ?? (st.income || '');
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  return `<h2>${t('planTitle')}</h2><div class="card">
-    ${fld(`${t('incomeQ')} (${S.baseCur()})`, `<div class="row"><input id="inc-in" class="bigin" type="text" inputmode="decimal" autocomplete="off" placeholder="0" value="${inc}">${SR ? `<button type="button" class="btn sm ghost" data-act="incMic" aria-label="${t('speak')}">${ico('mic', 18)}</button>` : ''}</div>`)}
-    <div class="seg" style="flex-wrap:wrap">${[...Object.entries(RULES).map(([id, v]) => [id, t(v[3])]), ['custom', t('ruleCustom')]].map(([id, l]) => `<label style="min-width:46%"><input type="radio" name="rule" value="${id}" ${k === id ? 'checked' : ''} data-act="rule" data-id="${id}"><span>${l}</span></label>`).join('')}</div>
-    ${k === 'custom' ? `<div class="grid2" style="gap:8px">${[['n', 'needs'], ['w', 'wants'], ['s', 'savingsG']].map(([f, l]) => `<label>${t(l)} %<input type="number" min="0" max="100" data-rule="${f}" value="${st.rule[f]}"></label>`).join('')}</div>` : ''}
-    <div id="plan-prev">${planPreview(calcNum(inc))}</div>
-    <div class="toggle"><span>${t('schedIncome')}</span><input type="checkbox" id="plan-sched"></div>
-    <div class="grid2" style="gap:8px">${fld(t('account'), `<select id="plan-acc">${opts(s.accounts, s.accounts[0]?.id, accName)}</select>`)}${fld(t('payDay'), `<input id="plan-day" type="number" min="1" max="28" value="${st.incomeDay || 1}">`)}</div>
-    <div class="toggle"><span>${t('makeGoal')}</span><input type="checkbox" id="plan-goal" checked></div>
-    <button class="btn" data-act="applyPlan">${ico('sparkles', 18)} ${t('applyPlan')}</button></div>`;
-}
-const calcNum = (v) => { const n = typeof v === 'number' ? v : calc(v); return n > 0 ? n : 0; };
 function budgetsCard() {
   const s = S.get(), sp = S.spentByCategory(V.ym), ex = s.categories.filter((c) => c.type === 'expense');
   return `<h2>${t('budgets')}</h2><div class="card">${ex.map((c) => { const b = s.budgets[c.id] || 0; return `<div class="item" data-act="editBudget" data-id="${c.id}"><div class="ico">${ico(c.icon)}</div><div class="grow">${esc(catName(c))}${b ? `<div class="row sp"><span class="muted">${M(sp[c.id] || 0)} ${t('of')} ${M(b)}</span></div>${bar(sp[c.id] || 0, b)}` : `<div class="muted" style="font-size:.8rem">${M(sp[c.id] || 0)} · ${t('add')} ${t('budget').toLowerCase()}</div>`}</div></div>`; }).join('')}</div>`;
@@ -276,7 +244,7 @@ function debtsCard() {
 function plan() {
   const sec = V.psec || 'budget';
   const tabs = `<div class="seg">${[['budget', 'secBudget'], ['goals', 'secGoals'], ['pay', 'secPay']].map(([k, l]) => `<label><input type="radio" name="psec" value="${k}" ${sec === k ? 'checked' : ''} data-act="psec" data-id="${k}"><span>${t(l)}</span></label>`).join('')}</div>`;
-  const body = sec === 'goals' ? goalsCard() : sec === 'pay' ? recurringCard() + debtsCard() : planCalcCard() + monthNav() + budgetsCard();
+  const body = sec === 'goals' ? goalsCard() : sec === 'pay' ? recurringCard() + debtsCard() : monthNav() + budgetsCard();
   return `${topbar(t('plan'))}${tabs}${body}`;
 }
 
@@ -483,31 +451,6 @@ const A = {
     const rec = { id: S.uid(), type: f.type, amount: f.amount, date: S.today(), accountId: f.accountId, categoryId: f.categoryId, note: f.name, tags: [], created: Date.now() };
     S.update((s) => { s.tx.push(rec); }); toast(t('favRegistered', { n: f.name })); checkBudget(rec);
   },
-  rule: (el) => { const r = RULES[el.dataset.id]; V.customRule = !r; S.update((st) => { if (r) st.settings.rule = { n: r[0], w: r[1], s: r[2] }; }); },
-  incMic: () => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) return toast(t('voiceNo'));
-    const r = new SR(); r.lang = getLang() === 'es' ? 'es-ES' : 'en-US';
-    r.onresult = (ev) => { const v = parseVoice(ev.results[0][0].transcript); if (v.amount > 0) { $('#inc-in').value = v.amount; $('#inc-in').dispatchEvent(new Event('input', { bubbles: true })); $('#inc-in').dispatchEvent(new Event('change', { bubbles: true })); } else toast(t('voiceFail')); };
-    r.onerror = () => toast(t('voiceFail'));
-    try { r.start(); } catch { toast(t('voiceNo')); }
-  },
-  applyPlan: () => {
-    const income = calcNum($('#inc-in').value), st = S.get().settings, r = st.rule;
-    if (!income) { $('#inc-in').focus(); return toast(t('needIncome')); }
-    if (r.n + r.w + r.s !== 100) return toast(t('sum100'));
-    const c = planCalc(income, r), acc = $('#plan-acc').value, day = Math.min(28, Math.max(1, parseInt($('#plan-day').value) || 1));
-    S.update((s) => {
-      s.settings.income = income; s.settings.incomeDay = day;
-      [...c.needs.items, ...c.wants.items].forEach((i) => { i.amount > 0 ? (s.budgets[i.id] = i.amount) : delete s.budgets[i.id]; });
-      if ($('#plan-goal').checked && c.savings > 0) { const g = s.goals.find((x) => x.auto); const target = Math.round(c.savings * 12); g ? (g.target = target) : s.goals.push({ id: S.uid(), name: t('goalMonthly'), target, saved: 0, auto: true }); }
-      if ($('#plan-sched').checked) {
-        const now = new Date(), ym = S.today().slice(0, 7); let next = `${ym}-${S.pad(day)}`; if (next < S.today()) next = `${S.addMonthsYM(ym, 1)}-${S.pad(day)}`;
-        const rec = { type: 'income', amount: income, accountId: acc, categoryId: 'i_salary', note: t('salaryNote'), freq: 'monthly', next, auto: false, plan: true };
-        const old = s.recurring.find((x) => x.plan); old ? Object.assign(old, rec) : s.recurring.push({ id: S.uid(), ...rec });
-      }
-    });
-    toast(t('planApplied'));
-  },
   newFav: () => favForm(), editFav: (el) => favForm(S.get().favorites.find((f) => f.id === el.dataset.id)),
   toggleHide: () => { S.setDevice({ hide: !S.device().hide }); render(); pushWidget(); },
   hideT: (el) => { S.setDevice({ hide: el.checked }); render(); pushWidget(); },
@@ -540,8 +483,7 @@ const A = {
   saveCfg: () => { try { Cloud.saveConfig($('#cfg-text').value); toast(t('cfgSaved')); setTimeout(() => location.reload(), 700); } catch (e) { toast(t('cfgBad', { e: e.message })); } },
   rmCfg: () => { Cloud.clearConfig(); location.reload(); },
   reload: () => location.reload(),
-  onbNext: () => { onbSave(); if (V.onb.step < 3) { V.onb.step++; renderOnb(); } else onbFinish(); },
-  onbBack: () => { onbSave(); V.onb.step--; renderOnb(); },
+  onbNext: () => { onbSave(); onbFinish(); },
   onbSkip: () => { S.update((st) => { st.settings.onboarded = true; }); onbClose(); },
   signOut: async () => {
     if (!confirm(t('signOutConfirm'))) return;
@@ -707,37 +649,24 @@ function showDashboard(anim, merged) {
 function onUser(u) { if (u) enter(u, true, false); else if (!entered) authScreen(); }
 
 // ---------- guía inicial de 3 pasos ----------
-function onboarding() { V.onb = { step: 1, income: S.get().settings.income || '', bal: {} }; renderOnb(); }
-function onbSave() {
-  const o = V.onb, inc = $('#onb-inc'); if (inc) o.income = inc.value;
-  document.querySelectorAll('[data-obal]').forEach((i) => { o.bal[i.dataset.obal] = i.value; });
-}
+function onboarding() { V.onb = { bal: {} }; renderOnb(); }
+function onbSave() { document.querySelectorAll('[data-obal]').forEach((i) => { V.onb.bal[i.dataset.obal] = i.value; }); }
 function renderOnb() {
   const o = V.onb, el = $('#onb'), st = S.get(), base = S.baseCur();
-  let body = '';
-  if (o.step === 1) body = `<h1>${t('onbIncomeQ')}</h1><p class="muted">${t('onbIncomeHint')}</p><input id="onb-inc" class="bigin" type="text" inputmode="decimal" autocomplete="off" placeholder="0" value="${esc(o.income)}"><div class="muted" style="margin-bottom:14px">${base}</div>`;
-  if (o.step === 2) body = `<h1>${t('onbAccQ')}</h1><p class="muted">${t('onbAccHint')}</p>${st.accounts.map((a) => `<label>${esc(accName(a))} (${a.currency || base})<input data-obal="${a.id}" type="number" step="0.01" inputmode="decimal" value="${o.bal[a.id] ?? (a.initial || '')}" placeholder="0"></label>`).join('')}`;
-  if (o.step === 3) body = `<h1>${t('onbPlanQ')}</h1><p class="muted">${t('onbPlanHint')}</p><div class="card" style="margin-bottom:14px">${planPreview(calcNum(o.income))}</div>`;
-  const dots = [1, 2, 3].map((n) => `<i class="${n === o.step ? 'on' : ''}"></i>`).join('');
   el.hidden = false;
-  el.innerHTML = `<div class="sheet onb"><div class="row sp"><span class="sub">${t('onbOf', { n: o.step })}</span><button class="linkb" data-act="onbSkip">${t('skip')}</button></div><div class="dots">${dots}</div>${body}
-    <div class="row" style="gap:8px">${o.step > 1 ? `<button class="btn ghost" data-act="onbBack">${t('backB')}</button>` : ''}<button class="btn" data-act="onbNext">${o.step === 3 ? t('start') : t('next')}</button></div></div>`;
+  el.innerHTML = `<div class="sheet onb"><div class="row sp"><span class="sub">${t('hello')}</span><button class="linkb" data-act="onbSkip">${t('skip')}</button></div>
+    <h1>${t('onbAccQ')}</h1><p class="muted">${t('onbAccHint')}</p>${st.accounts.map((a) => `<label>${esc(accName(a))} (${a.currency || base})<input data-obal="${a.id}" type="number" step="0.01" inputmode="decimal" value="${o.bal[a.id] ?? (a.initial || '')}" placeholder="0"></label>`).join('')}
+    <button class="btn" data-act="onbNext" style="margin-top:6px">${t('start')}</button></div>`;
   const first = el.querySelector('input'); if (first && !reduced()) first.focus({ preventScroll: true });
 }
 function onbClose() { const el = $('#onb'); el.hidden = true; el.innerHTML = ''; render(); }
 function onbFinish() {
-  const o = V.onb, income = calcNum(o.income), r = S.get().settings.rule;
+  const o = V.onb;
   S.update((s) => {
     s.accounts.forEach((a) => { const v = o.bal[a.id]; if (v !== undefined && v !== '') a.initial = num(v); });
-    if (income > 0) {
-      s.settings.income = income;
-      const c = planCalc(income, r);
-      [...c.needs.items, ...c.wants.items].forEach((i) => { if (i.amount > 0) s.budgets[i.id] = i.amount; });
-      if (c.savings > 0 && !s.goals.some((g) => g.auto)) s.goals.push({ id: S.uid(), name: t('goalMonthly'), target: Math.round(c.savings * 12), saved: 0, auto: true });
-    }
     s.settings.onboarded = true;
   });
-  onbClose(); if (income > 0) toast(t('planApplied'));
+  onbClose();
 }
 
 // ---------- avisos al abrir ----------
@@ -782,14 +711,11 @@ document.addEventListener('click', (e) => {
   if (el && el.dataset.act !== 'notif' && A[el.dataset.act]) A[el.dataset.act](el);
 });
 document.addEventListener('input', (e) => {
-  if (e.target.id === 'inc-in') { V.planIncome = e.target.value; $('#plan-prev').innerHTML = planPreview(calcNum(e.target.value)); }
   if (e.target.id === 'f-q') { V.q = e.target.value; $('#mlist').innerHTML = movesList(); }
 });
 document.addEventListener('change', (e) => {
   const id = e.target.id;
   if (id === 'f-from' || id === 'f-to') { V.from = $('#f-from').value || V.from; V.to = $('#f-to').value || V.to; render(); }
-  else if (id === 'inc-in') { S.update((st) => { st.settings.income = calcNum(e.target.value); }); }
-  else if (e.target.dataset.rule) { S.update((st) => { st.settings.rule[e.target.dataset.rule] = Math.max(0, Math.min(100, parseInt(e.target.value) || 0)); }); }
   else if (id === 's-lang') { S.setDevice({ lang: e.target.value }); setLang(e.target.value); render(); }
   else if (id === 's-base') { S.update((s) => { s.settings.base = e.target.value; s.settings.rates = {}; }); render(); }
   else if (id === 's-remind') S.setDevice({ remindTime: e.target.value, lastRemind: null });
