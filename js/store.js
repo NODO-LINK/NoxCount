@@ -28,15 +28,25 @@ const defCats = () => [
 export const defaultState = () => ({
   accounts: [{ id: 'a_cash', key: 'a_cash', kind: 'cash', initial: 0 }, { id: 'a_bank', key: 'a_bank', kind: 'bank', initial: 0 }],
   categories: defCats(), tx: [], recurring: [], budgets: {}, goals: [], debts: [], favorites: [],
-  settings: { base: 'USD', rates: {}, income: 0, rule: { n: 50, w: 30, s: 20 }, incomeDay: 1 }, updatedAt: 0,
+  settings: { base: 'USD', rates: {}, income: 0, rule: { n: 50, w: 30, s: 20 }, incomeDay: 1, onboarded: false }, updatedAt: 0,
 });
+export const hasData = (st = state) => st.tx.length > 0 || st.goals.length > 0 || st.debts.length > 0 || st.recurring.length > 0 || st.favorites.length > 0 || Object.keys(st.budgets).length > 0 || st.accounts.some((a) => a.initial) || st.settings.income > 0;
 const migrate = (st) => {
-  const d = defaultState();
-  for (const k of ['favorites', 'settings']) if (!st[k]) st[k] = d[k];
-  st.settings = { ...d.settings, ...st.settings, rates: st.settings.rates || {}, rule: { ...d.settings.rule, ...(st.settings.rule || {}) } };
+  const d = defaultState(), prev = st.settings || {};
+  for (const k of ['favorites']) if (!st[k]) st[k] = d[k];
+  st.settings = { ...d.settings, ...prev, rates: prev.rates || {}, rule: { ...d.settings.rule, ...(prev.rule || {}) } };
+  if (prev.onboarded === undefined) st.settings.onboarded = hasData(st); // quien ya tenía datos no ve la guía inicial
   st.categories.forEach((c) => { c.icon = iconName(c.icon); }); // emojis antiguos -> vectores
   return st;
 };
+// une dos estados por id (datos locales previos + datos que ya tenía la cuenta)
+export function merge(remote, local) {
+  const out = JSON.parse(JSON.stringify(remote));
+  for (const k of ['accounts', 'categories', 'tx', 'recurring', 'goals', 'debts', 'favorites']) { const ids = new Set(out[k].map((x) => x.id)); local[k].forEach((x) => { if (!ids.has(x.id)) out[k].push(x); }); }
+  for (const [c, v] of Object.entries(local.budgets || {})) if (!(c in out.budgets)) out.budgets[c] = v;
+  out.updatedAt = Date.now();
+  return out;
+}
 
 // ---- cifrado opcional en el dispositivo (AES-GCM, clave derivada del PIN con PBKDF2) ----
 const ENC = 'noxcount.enc';
@@ -85,6 +95,11 @@ export async function disableEncryption() {
   const keys = Object.keys(localStorage).filter((k) => k.startsWith('noxcount.r.'));
   for (const k of keys) { const v = localStorage.getItem(k); if (v.startsWith('enc:')) localStorage.setItem(k, await decStr(v.slice(4))); }
   localStorage.setItem(KEY, JSON.stringify(state)); localStorage.removeItem(ENC); cryptoKey = null; salt = null;
+}
+// borra los datos locales (al cerrar sesión), conserva solo los ajustes del dispositivo
+export function wipe() {
+  Object.keys(localStorage).filter((k) => k.startsWith('noxcount.') && k !== DEV).forEach((k) => localStorage.removeItem(k));
+  cryptoKey = null; salt = null; state = defaultState(); subs.forEach((f) => f(state));
 }
 export function update(fn) { fn(state); state.updatedAt = Date.now(); persist(); subs.forEach((f) => f(state)); if (saveHook) saveHook(state); }
 export function replace(s) { state = migrate(s); persist(); subs.forEach((f) => f(state)); }

@@ -8,6 +8,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const V = { tab: 'home', sub: null, ym: S.today().slice(0, 7), from: null, to: null, q: '', rmode: 'month', year: new Date().getFullYear(), charts: {} };
 const CURS = ['USD', 'EUR', 'GBP', 'MXN', 'COP', 'ARS', 'PEN', 'CLP', 'BRL', 'UYU', 'BOB', 'CRC', 'DOP', 'GTQ', 'VES'];
+const me = () => Cloud.user() || S.device().lastUser; // usuario actual (o el último en este dispositivo si estás sin conexión)
 const M = (n, cur) => (S.device().hide ? '••••••' : money(n, cur || S.baseCur()));
 
 const catName = (c) => (c ? c.name || t(c.key) : '—');
@@ -45,14 +46,14 @@ const opts = (list, sel, fn) => list.map((x) => `<option value="${x.id}" ${x.id 
 
 // ---------- navegación ----------
 function renderNav() {
-  const items = [['home', 'home', t('home')], ['moves', 'receipt', t('moves')], ['add', 'plus', ''], ['plan', 'calc', t('plan')], ['reports', 'chart', t('reports')], ['more', 'menu', t('more')]];
+  const items = [['home', 'home', t('home')], ['moves', 'receipt', t('moves')], ['add', 'plus', ''], ['plan', 'calc', t('plan')], ['reports', 'chart', t('reports')]];
   $('#nav').innerHTML = items.map(([k, i, l]) => k === 'add' ? `<button class="fab" data-act="newTx" aria-label="${t('newMove')}">${ico('plus', 26)}</button>` : `<button class="${V.tab === k ? 'on' : ''}" data-act="tab" data-id="${k}">${ico(i, 22)}<span>${l}</span></button>`).join('');
 }
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 function render() {
   document.title = 'NoxCount';
-  const views = { home, moves, reports, plan, more };
-  const key = V.tab + '|' + V.sub + '|' + V.rmode + '|' + V.ym, view = $('#view');
+  const views = { home, moves, reports, plan, profile };
+  const key = V.tab + '|' + V.sub + '|' + V.rmode + '|' + V.ym + '|' + V.psec, view = $('#view');
   view.innerHTML = (views[V.tab] || home)();
   view.classList.toggle('anim', key !== V.key && !reduced());
   V.key = key;
@@ -80,6 +81,9 @@ function sharedOpen(src, openFn) {
 }
 
 // ---------- vistas ----------
+function topbar(title, extra = '') {
+  return `<div class="top"><h1>${title}</h1><span class="row" style="gap:4px">${extra}<button class="avatar" data-act="profile" aria-label="${t('profile')}">${ico('user', 20)}</button></span></div>`;
+}
 function monthNav() {
   return `<div class="mnav noprint"><button data-act="mPrev" aria-label="prev">${ico('left', 18)}</button><b>${monthName(V.ym)}</b><button data-act="mNext" aria-label="next">${ico('right', 18)}</button></div>`;
 }
@@ -114,6 +118,12 @@ function availCard() {
   return `<div class="card"><div class="row sp"><span class="muted">${t('availSpend')}</span><b>${M(Math.max(0, left))}</b></div>${bar(spent, limit)}
     <div class="sub" style="margin-top:8px">${left > 0 ? t('perDay', { a: M(left / daysLeft) }) : t('overLimit', { a: M(-left) })}</div></div>`;
 }
+function summaryBlock() {
+  const t0 = S.today();
+  const d7 = S.sumTx(S.txInRange(S.addDays(t0, -6), t0), 'expense'), p7 = S.sumTx(S.txInRange(S.addDays(t0, -13), S.addDays(t0, -7)), 'expense');
+  const delta = p7 ? `${d7 >= p7 ? '+' : ''}${Math.round(((d7 - p7) / p7) * 100)}%` : '—';
+  return `<h2>${t('overview')}</h2><div class="card">${t('weeklyText', { a: M(d7), d: delta })}</div>${insights().replace(/^<h2>.*?<\/h2>/, '')}`;
+}
 function insights() {
   const t0 = S.today(), ym = t0.slice(0, 7);
   const day = Number(t0.slice(8)), dim = Number(S.monthEnd(ym).slice(8));
@@ -130,22 +140,16 @@ function insights() {
 function home() {
   const s = S.get(), ym = S.today().slice(0, 7), mt = S.monthTx(ym);
   const inc = S.sumTx(mt, 'income'), exp = S.sumTx(mt, 'expense');
-  const spent = S.spentByCategory(ym);
-  const bud = Object.entries(s.budgets).filter(([, v]) => v > 0).map(([id, v]) => ({ id, v, p: (spent[id] || 0) / v })).sort((a, b) => b.p - a.p).slice(0, 4);
-  const d7 = S.sumTx(S.txInRange(S.addDays(S.today(), -6), S.today()), 'expense'), p7 = S.sumTx(S.txInRange(S.addDays(S.today(), -13), S.addDays(S.today(), -7)), 'expense');
-  const delta = p7 ? `${d7 >= p7 ? '+' : ''}${Math.round(((d7 - p7) / p7) * 100)}%` : '—';
-  const due = dueList();
-  const favs = s.favorites.length ? `<div class="chips">${s.favorites.map((f) => `<button class="chip" data-act="favTx" data-id="${f.id}">${ico(catById(f.categoryId)?.icon || 'star', 16)} ${esc(f.name)} <b class="${cls(f.type)}">${M(f.amount, S.accCur(f.accountId))}</b></button>`).join('')}</div>` : '';
-  return `<div class="row sp"><h1>NoxCount ${syncBadge()}</h1><span class="row" style="gap:2px">${Cloud.user() ? '' : `<button class="chip" data-act="cloudBtn">${ico('cloud', 16)} ${Cloud.configured() ? t('signIn') : t('localMode')}</button>`}<button class="eye" data-act="toggleHide" aria-label="${t('hide')}">${ico(S.device().hide ? 'eyeoff' : 'eye', 22)}</button></span></div>
-  <div class="card hero"><div class="muted">${t('balance')} · ${S.baseCur()}</div><div class="big" data-count="${S.totalBalance()}" data-cur="${S.baseCur()}">${M(S.totalBalance())}</div></div>
+  const recent = S.txInRange('1900-01-01', '2999-12-31').slice(0, 5);
+  const favs = s.favorites.length ? `<h2>${t('favorites')}</h2><div class="chips">${s.favorites.map((f) => `<button class="chip" data-act="favTx" data-id="${f.id}">${ico(catById(f.categoryId)?.icon || 'star', 16)} ${esc(f.name)} <b class="${cls(f.type)}">${M(f.amount, S.accCur(f.accountId))}</b></button>`).join('')}</div>` : '';
+  const brand = `<span class="brand"><span class="logo-mark" ${V.vtLogin ? 'style="view-transition-name:logo"' : ''}>${ico('moon', 26)}</span>NoxCount</span>`;
+  const eye = `<button class="eye" data-act="toggleHide" aria-label="${t('hide')}">${ico(S.device().hide ? 'eyeoff' : 'eye', 22)}</button>`;
+  return `${topbar(brand, eye)}
+  <div class="card hero" ${V.vtLogin ? 'style="view-transition-name:authcard"' : ''}><div class="muted">${t('balance')} · ${S.baseCur()}</div><div class="big" data-count="${S.totalBalance()}" data-cur="${S.baseCur()}">${M(S.totalBalance())}</div></div>
   ${availCard()}
-  ${favs}
   <div class="grid2"><div class="card"><div class="muted">${t('income')} · ${t('thisMonth')}</div><b class="inc">${M(inc)}</b></div><div class="card"><div class="muted">${t('expense')} · ${t('thisMonth')}</div><b class="exp">${M(exp)}</b></div></div>
-  <h2>${t('weekly')}</h2><div class="card">${t('weeklyText', { a: M(d7), d: delta })}</div>
-  ${insights()}
-  <h2>${t('budgets')}</h2><div class="card">${bud.length ? bud.map((b) => progress(catName(catById(b.id)), catById(b.id)?.icon, spent[b.id] || 0, b.v)).join('') : `<span class="muted">${t('nothing')}</span>`}</div>
-  <h2>${t('goals')}</h2><div class="card">${s.goals.length ? s.goals.map((g) => progress(g.name, 'target', g.saved, g.target)).join('') : `<span class="muted">${t('nothing')}</span>`}</div>
-  <h2>${t('upcoming')}</h2><div class="card">${due.length ? due.map((d) => `<div class="row sp" style="padding:6px 0"><span>${ico(d.icon, 15)} ${esc(d.text)}<br><small class="muted">${dayName(d.date)}</small></span><b>${M(d.amount)}</b></div>`).join('') : `<span class="muted">${t('nothing')}</span>`}</div>`;
+  ${favs}
+  <h2>${t('recent')}</h2><div class="card">${recent.map(txRow).join('') || `<span class="muted">${t('nothing')}</span>`}${recent.length ? `<button class="btn ghost sm" style="margin-top:10px" data-act="tab" data-id="moves">${t('seeAll')}</button>` : ''}</div>`;
 }
 
 function movesList() {
@@ -159,7 +163,7 @@ function movesList() {
 }
 function moves() {
   if (!V.from) { V.from = V.ym + '-01'; V.to = S.monthEnd(V.ym); }
-  return `<h1>${t('moves')}</h1>
+  return `${topbar(t('moves'))}
   <div class="search">${ico('search', 18)}<input id="f-q" type="search" placeholder="${t('search')}" value="${esc(V.q)}" autocomplete="off"></div>
   <div class="card"><div class="grid2" style="gap:8px"><div>${fld(t('from'), `<input type="date" id="f-from" value="${V.from}">`)}</div><div>${fld(t('to'), `<input type="date" id="f-to" value="${V.to}">`)}</div></div>
   <button class="btn ghost sm" data-act="thisMonth">${t('thisMonth')}</button></div>
@@ -169,7 +173,7 @@ function moves() {
 function reports() {
   const modeTabs = `<div class="seg noprint"><label><input type="radio" name="rmode" value="month" ${V.rmode === 'month' ? 'checked' : ''} data-act="rmode" data-id="month"><span>${t('monthly')}</span></label><label><input type="radio" name="rmode" value="year" ${V.rmode === 'year' ? 'checked' : ''} data-act="rmode" data-id="year"><span>${t('annual')}</span></label></div>`;
   V.charts = {};
-  return `<h1>${t('reports')}</h1>${modeTabs}${V.rmode === 'year' ? yearReport() : monthReport()}<button class="btn noprint" data-act="print">${ico('file', 18)} ${t('print')}</button>`;
+  return `${topbar(t('reports'))}${modeTabs}${V.rmode === 'year' ? yearReport() : monthReport()}<button class="btn noprint" data-act="print">${ico('file', 18)} ${t('print')}</button>`;
 }
 function monthReport() {
   const ym = V.ym, mt = S.monthTx(ym), prev = S.addMonthsYM(ym, -1), pt = S.monthTx(prev);
@@ -192,6 +196,7 @@ function monthReport() {
   const accRows = S.get().accounts.map((a) => { const x = mt.filter((y) => y.accountId === a.id); const i = S.sumTx(x, 'income'), e = S.sumTx(x, 'expense'); return i || e ? `<div class="row sp" style="padding:4px 0"><span>${esc(accName(a))}</span><span><span class="inc">${M(i)}</span> / <span class="exp">${M(e)}</span></span></div>` : ''; }).join('');
   const top = mt.filter((x) => x.type === 'expense').sort((a, b) => S.baseAmount(b) - S.baseAmount(a)).slice(0, 5);
   return `${monthNav()}
+  ${summaryBlock()}
   <h2>${t('byCategory')}</h2><div class="card"><div class="row">${total ? `${Ch.donut(data, 'cat')}<div class="legend grow">${data.map((d) => `<div><i style="background:${d.color}"></i><span class="grow ellip row" style="gap:6px">${ico(d.icon, 15)}${esc(d.label)}</span><b>${Math.round((d.value / total) * 100)}%</b></div>`).join('')}</div>` : `<span class="muted">${t('nothing')}</span>`}</div><div class="detail muted" id="d-cat"></div></div>
   <h2>${t('byMonth')}</h2><div class="card">${Ch.bars(rows, 'bars')}<div class="detail muted" id="d-bars"></div></div>
   <h2>${t('trend')}</h2><div class="card">${Ch.line(pts, 'line')}<div class="detail muted" id="d-line"></div></div>
@@ -247,34 +252,48 @@ function planCalcCard() {
     <button class="btn" data-act="applyPlan">${ico('sparkles', 18)} ${t('applyPlan')}</button></div>`;
 }
 const calcNum = (v) => { const n = typeof v === 'number' ? v : calc(v); return n > 0 ? n : 0; };
-function plan() {
-  const s = S.get(), sp = S.spentByCategory(V.ym);
-  const ex = s.categories.filter((c) => c.type === 'expense');
-  return `<h1>${t('plan')}</h1>${planCalcCard()}${monthNav()}
-  <h2>${t('budgets')}</h2><div class="card">${ex.map((c) => { const b = s.budgets[c.id] || 0; return `<div class="item" data-act="editBudget" data-id="${c.id}"><div class="ico">${ico(c.icon)}</div><div class="grow">${esc(catName(c))}${b ? `<div class="row sp"><span class="muted">${M(sp[c.id] || 0)} ${t('of')} ${M(b)}</span></div>${bar(sp[c.id] || 0, b)}` : `<div class="muted" style="font-size:.8rem">${M(sp[c.id] || 0)} · ${t('add')} ${t('budget').toLowerCase()}</div>`}</div></div>`; }).join('')}</div>
-  <h2>${t('goals')}</h2><div class="card">${s.goals.map((g) => `<div class="item" data-act="editGoal" data-id="${g.id}"><div class="ico">${ico('target')}</div><div class="grow">${progress(g.name, '', g.saved, g.target)}</div></div>`).join('') || `<span class="muted">${t('nothing')}</span>`}
+function budgetsCard() {
+  const s = S.get(), sp = S.spentByCategory(V.ym), ex = s.categories.filter((c) => c.type === 'expense');
+  return `<h2>${t('budgets')}</h2><div class="card">${ex.map((c) => { const b = s.budgets[c.id] || 0; return `<div class="item" data-act="editBudget" data-id="${c.id}"><div class="ico">${ico(c.icon)}</div><div class="grow">${esc(catName(c))}${b ? `<div class="row sp"><span class="muted">${M(sp[c.id] || 0)} ${t('of')} ${M(b)}</span></div>${bar(sp[c.id] || 0, b)}` : `<div class="muted" style="font-size:.8rem">${M(sp[c.id] || 0)} · ${t('add')} ${t('budget').toLowerCase()}</div>`}</div></div>`; }).join('')}</div>`;
+}
+function goalsCard() {
+  const s = S.get();
+  return `<div class="card">${s.goals.map((g) => `<div class="item" data-act="editGoal" data-id="${g.id}"><div class="ico">${ico('target')}</div><div class="grow">${progress(g.name, '', g.saved, g.target)}</div></div>`).join('') || `<span class="muted">${t('nothing')}</span>`}
   <button class="btn ghost" style="margin-top:10px" data-act="newGoal">+ ${t('goals')}</button></div>`;
 }
-
-function more() {
+function recurringCard() {
   const s = S.get();
-  const back = `<button class="btn ghost sm" data-act="sub" data-id="">${ico('left', 16)} ${t('more')}</button>`;
+  const row = (r) => { const due = r.next <= S.today(); return `<div class="item" data-act="editRec" data-id="${r.id}"><div class="ico">${ico(catById(r.categoryId)?.icon || 'repeat')}</div><div class="grow">${esc(r.note || catName(catById(r.categoryId)))}<br><small class="muted">${t(r.freq + 'F')} · ${dayName(r.next)}${r.auto ? ' · auto' : ''}</small></div><div style="text-align:right"><b class="${cls(r.type)}">${M(r.amount)}</b>${due && !r.auto ? `<br><button class="btn sm" data-act="confirmRec" data-id="${r.id}">${t('confirm')}</button>` : ''}</div></div>`; };
+  return `<h2>${t('recurring')}</h2><div class="card">${s.recurring.map(row).join('') || `<span class="muted">${t('nothing')}</span>`}<button class="btn ghost" style="margin-top:10px" data-act="newRec">+ ${t('recurring')}</button></div>`;
+}
+function debtsCard() {
+  const s = S.get();
+  const row = (d) => `<div class="item" data-act="editDebt" data-id="${d.id}"><div class="ico">${ico(d.dir === 'owe' ? 'up' : 'down')}</div><div class="grow"><span style="${d.paid ? 'text-decoration:line-through' : ''}">${esc(d.who)}</span><br><small class="muted">${d.paid ? t('paid') : d.due ? t('due') + ' ' + dayName(d.due) : t('pending')}</small></div><b class="${d.dir === 'owe' ? 'exp' : 'inc'}">${M(d.amount)}</b></div>`;
+  const tot = (dir) => s.debts.filter((d) => d.dir === dir && !d.paid).reduce((a, d) => a + d.amount, 0);
+  return `<h2>${t('debts')}</h2><div class="grid2"><div class="card"><span class="muted">${t('iOwe')}</span><br><b class="exp">${M(tot('owe'))}</b></div><div class="card"><span class="muted">${t('theyOwe')}</span><br><b class="inc">${M(tot('owed'))}</b></div></div>
+  <div class="card" style="margin-top:12px">${s.debts.map(row).join('') || `<span class="muted">${t('nothing')}</span>`}<button class="btn ghost" style="margin-top:10px" data-act="newDebt">+ ${t('debts')}</button></div>`;
+}
+function plan() {
+  const sec = V.psec || 'budget';
+  const tabs = `<div class="seg">${[['budget', 'secBudget'], ['goals', 'secGoals'], ['pay', 'secPay']].map(([k, l]) => `<label><input type="radio" name="psec" value="${k}" ${sec === k ? 'checked' : ''} data-act="psec" data-id="${k}"><span>${t(l)}</span></label>`).join('')}</div>`;
+  const body = sec === 'goals' ? goalsCard() : sec === 'pay' ? recurringCard() + debtsCard() : planCalcCard() + monthNav() + budgetsCard();
+  return `${topbar(t('plan'))}${tabs}${body}`;
+}
+
+function profile() {
+  const s = S.get(), u = me();
+  const back = `<button class="btn ghost sm" data-act="sub" data-id="">${ico('left', 16)} ${t('profile')}</button>`;
   if (!V.sub) {
-    return `<h1>${t('more')}</h1><div class="card menu">${[['accounts', 'wallet'], ['favorites', 'star'], ['debts', 'swap'], ['recurring', 'repeat'], ['categories', 'tag'], ['settings', 'sliders']].map(([k, i]) => `<div class="item" data-act="sub" data-id="${k}"><div class="ico">${ico(i)}</div><div class="grow">${t(k)}</div><span class="chev">${ico('right', 18)}</span></div>`).join('')}</div>`;
+    const item = (k, i, label, sub) => `<div class="item" data-act="sub" data-id="${k}"><div class="ico">${ico(i)}</div><div class="grow">${label}${sub ? `<br><small class="muted">${sub}</small>` : ''}</div><span class="chev">${ico('right', 18)}</span></div>`;
+    const ini = ((u && u.email) || '?').slice(0, 1).toUpperCase();
+    return `<div class="top"><button class="btn ghost sm" data-act="tab" data-id="home">${ico('left', 16)} ${t('home')}</button></div>
+    <div class="card row" style="gap:14px"><div class="acc-avatar">${esc(ini)}</div><div class="grow"><b class="ellip" style="display:block">${esc((u && u.email) || '')}</b><span class="sub row" style="gap:5px">${ico('cloud', 13)} ${syncText() || t('myData')}</span></div></div>
+    <h2>${t('myMoney')}</h2><div class="card menu">${item('accounts', 'wallet', t('accounts'), `${s.accounts.length}`)}${item('categories', 'tag', t('categories'), `${s.categories.length}`)}${item('favorites', 'star', t('favorites'), `${s.favorites.length}`)}</div>
+    <h2>${t('settings')}</h2><div class="card menu">${item('settings', 'sliders', t('settings'), `${t('secAccount')} · ${t('secSecurity')} · ${t('secPrefs')}`)}</div>`;
   }
   if (V.sub === 'accounts') {
     return `${back}<h1>${t('accounts')}</h1><div class="card">${s.accounts.map((a) => `<div class="item" data-act="editAcc" data-id="${a.id}"><div class="ico">${ico({ cash: 'cash', bank: 'bank', wallet: 'phone' }[a.kind])}</div><div class="grow">${esc(accName(a))}<br><small class="muted">${t(a.kind)} · ${a.currency || S.baseCur()}</small></div><b>${M(S.accountBalance(a), a.currency)}</b></div>`).join('')}
     <button class="btn" style="margin-top:10px" data-act="newAcc">+ ${t('accounts')}</button></div>`;
-  }
-  if (V.sub === 'debts') {
-    const row = (d) => `<div class="item" data-act="editDebt" data-id="${d.id}"><div class="ico">${ico(d.dir === 'owe' ? 'up' : 'down')}</div><div class="grow"><span style="${d.paid ? 'text-decoration:line-through' : ''}">${esc(d.who)}</span><br><small class="muted">${d.paid ? t('paid') : d.due ? t('due') + ' ' + dayName(d.due) : t('pending')}</small></div><b class="${d.dir === 'owe' ? 'exp' : 'inc'}">${M(d.amount)}</b></div>`;
-    const tot = (dir) => s.debts.filter((d) => d.dir === dir && !d.paid).reduce((a, d) => a + d.amount, 0);
-    return `${back}<h1>${t('debts')}</h1><div class="grid2"><div class="card"><span class="muted">${t('iOwe')}</span><br><b class="exp">${M(tot('owe'))}</b></div><div class="card"><span class="muted">${t('theyOwe')}</span><br><b class="inc">${M(tot('owed'))}</b></div></div>
-    <div class="card" style="margin-top:12px">${s.debts.map(row).join('') || `<span class="muted">${t('nothing')}</span>`}<button class="btn" style="margin-top:10px" data-act="newDebt">+ ${t('debts')}</button></div>`;
-  }
-  if (V.sub === 'recurring') {
-    const row = (r) => { const due = r.next <= S.today(); return `<div class="item" data-act="editRec" data-id="${r.id}"><div class="ico">${ico(catById(r.categoryId)?.icon || 'repeat')}</div><div class="grow">${esc(r.note || catName(catById(r.categoryId)))}<br><small class="muted">${t(r.freq + 'F')} · ${dayName(r.next)}${r.auto ? ' · auto' : ''}</small></div><div style="text-align:right"><b class="${cls(r.type)}">${M(r.amount)}</b>${due && !r.auto ? `<br><button class="btn sm" data-act="confirmRec" data-id="${r.id}">${t('confirm')}</button>` : ''}</div></div>`; };
-    return `${back}<h1>${t('recurring')}</h1><div class="card">${s.recurring.map(row).join('') || `<span class="muted">${t('nothing')}</span>`}<button class="btn" style="margin-top:10px" data-act="newRec">+ ${t('recurring')}</button></div>`;
   }
   if (V.sub === 'categories') {
     const block = (type) => `<h2>${t(type)}</h2><div class="card">${s.categories.filter((c) => c.type === type).map((c) => `<div class="item" data-act="editCat" data-id="${c.id}"><div class="ico">${ico(c.icon)}</div><div class="grow">${esc(catName(c))}</div></div>`).join('')}<button class="btn ghost" style="margin-top:10px" data-act="newCat" data-id="${type}">+ ${t('add')}</button></div>`;
@@ -283,24 +302,27 @@ function more() {
   if (V.sub === 'favorites') {
     return `${back}<h1>${t('favorites')}</h1><p class="muted">${t('favHint')}</p><div class="card">${s.favorites.map((f) => `<div class="item" data-act="editFav" data-id="${f.id}"><div class="ico">${ico(catById(f.categoryId)?.icon || 'star')}</div><div class="grow">${esc(f.name)}<br><small class="muted">${esc(accName(accById(f.accountId)))}</small></div><b class="${cls(f.type)}">${M(f.amount, S.accCur(f.accountId))}</b></div>`).join('') || `<span class="muted">${t('nothing')}</span>`}<button class="btn" style="margin-top:10px" data-act="newFav">+ ${t('favAdd')}</button></div>`;
   }
-  if (V.sub === 'settings') {
-    const d = S.device(), n = d.notif || {}, u = Cloud.user(), enc = S.isEncrypted(), base = S.baseCur();
-    const tg = (k, l) => `<div class="toggle"><span>${l}</span><input type="checkbox" data-act="notif" data-id="${k}" ${n[k] ? 'checked' : ''}></div>`;
-    const used = [...new Set(s.accounts.map((a) => a.currency || base))].filter((c) => c !== base);
-    const rateRows = used.map((c) => `<label>${t('rateHelp', { c, b: base })}<input type="number" step="any" min="0" data-rate="${c}" value="${s.settings.rates[c] || ''}" placeholder="0.00"></label>`).join('');
-    const bioOk = !!window.PublicKeyCredential && !enc && d.pin;
-    return `${back}<h1>${t('settings')}</h1>
-    <div class="card">${fld(t('language'), `<select id="s-lang"><option value="es" ${getLang() === 'es' ? 'selected' : ''}>Español</option><option value="en" ${getLang() === 'en' ? 'selected' : ''}>English</option></select>`)}
-    <div class="toggle"><span>${t('hide')}</span><input type="checkbox" data-act="hideT" ${d.hide ? 'checked' : ''}></div></div>
-    <h2>${t('currency')}</h2><div class="card">${fld(t('baseCur'), `<select id="s-base">${CURS.map((c) => `<option ${c === base ? 'selected' : ''}>${c}</option>`).join('')}</select>`)}${rateRows ? `<h2 style="margin-top:4px">${t('rates')}</h2>${rateRows}` : ''}</div>
-    <h2>${t('pin')}</h2><div class="card">${d.pin ? `<button class="btn danger" data-act="rmPin">${t('removePin')}</button>` : `<button class="btn ghost" data-act="setPin">${t('setPin')}</button>`}
-    ${bioOk ? `<button class="btn ghost" style="margin-top:8px" data-act="${d.bio ? 'bioOff' : 'bioOn'}">${d.bio ? t('bioRemove') : t('bioSet')}</button>` : ''}</div>
-    <h2>${t('encrypt')}</h2><div class="card"><p class="muted" style="margin-top:0">${t('encWarn')}</p>${enc ? `<div class="row" style="margin-bottom:8px;gap:6px">${ico("check", 16)}${t("encActive")}</div><button class="btn danger" data-act="encOff">${t('encOff')}</button>` : d.pin ? `<button class="btn ghost" data-act="encOn">${t('encOn')}</button>` : `<span class="muted">${t('needPin')}</span>`}</div>
-    <h2>${t('notifs')}</h2><div class="card">${tg('due', t('nDue'))}${tg('budget', t('nBudget'))}${tg('summary', t('nSummary'))}${tg('remind', t('remind'))}${fld(t('remindAt'), `<input type="time" id="s-remind" value="${d.remindTime || '20:00'}">`)}</div>
-    <h2>${t('cloud')}</h2><div class="card">${cloudCard(u)}</div>
-    <h2></h2><button class="btn danger" data-act="reset">${t('reset')}</button>`;
-  }
+  if (V.sub === 'settings') return settingsView(back);
   return '';
+}
+
+function settingsView(back) {
+  const s = S.get(), d = S.device(), n = d.notif || {}, u = me(), enc = S.isEncrypted(), base = S.baseCur();
+  const tg = (k, l) => `<div class="toggle"><span>${l}</span><input type="checkbox" data-act="notif" data-id="${k}" ${n[k] ? 'checked' : ''}></div>`;
+  const used = [...new Set(s.accounts.map((a) => a.currency || base))].filter((c) => c !== base);
+  const rateRows = used.map((c) => `<label>${t('rateHelp', { c, b: base })}<input type="number" step="any" min="0" data-rate="${c}" value="${s.settings.rates[c] || ''}" placeholder="0.00"></label>`).join('');
+  const bioOk = !!window.PublicKeyCredential && !enc && d.pin;
+  return `${back}<h1>${t('settings')}</h1>
+  <h2>${t('secAccount')}</h2><div class="card"><div class="row" style="gap:6px">${ico('user', 16)}<b class="ellip">${esc((u && u.email) || '')}</b></div><div class="muted" style="margin:6px 0 10px">${syncText()}</div>
+    <button class="btn ghost" data-act="signOut">${ico('logout', 18)} ${t('signOut')}</button>${Cloud.configured() && !Cloud.fromFile() ? `<button class="btn ghost" style="margin-top:8px" data-act="rmCfg">${t('cfgRemove')}</button>` : ''}</div>
+  <h2>${t('secSecurity')}</h2><div class="card">${d.pin ? `<button class="btn danger" data-act="rmPin">${ico('lock', 18)} ${t('removePin')}</button>` : `<button class="btn ghost" data-act="setPin">${ico('lock', 18)} ${t('setPin')}</button>`}
+    ${bioOk ? `<button class="btn ghost" style="margin-top:8px" data-act="${d.bio ? 'bioOff' : 'bioOn'}">${ico('finger', 18)} ${d.bio ? t('bioRemove') : t('bioSet')}</button>` : ''}
+    <hr><b>${t('encrypt')}</b><p class="muted" style="margin:6px 0 10px">${t('encWarn')}</p>${enc ? `<div class="row" style="margin-bottom:8px;gap:6px">${ico('check', 16)}${t('encActive')}</div><button class="btn danger" data-act="encOff">${t('encOff')}</button>` : d.pin ? `<button class="btn ghost" data-act="encOn">${t('encOn')}</button>` : `<span class="muted">${t('needPin')}</span>`}</div>
+  <h2>${t('secPrefs')}</h2><div class="card">${fld(t('language'), `<select id="s-lang"><option value="es" ${getLang() === 'es' ? 'selected' : ''}>Español</option><option value="en" ${getLang() === 'en' ? 'selected' : ''}>English</option></select>`)}
+    <div class="toggle"><span>${t('hide')}</span><input type="checkbox" data-act="hideT" ${d.hide ? 'checked' : ''}></div>
+    <hr>${fld(t('baseCur'), `<select id="s-base">${CURS.map((c) => `<option ${c === base ? 'selected' : ''}>${c}</option>`).join('')}</select>`)}${rateRows ? `<b>${t('rates')}</b>${rateRows}` : ''}
+    <hr><b>${t('notifs')}</b>${tg('due', t('nDue'))}${tg('budget', t('nBudget'))}${tg('summary', t('nSummary'))}${tg('remind', t('remind'))}${fld(t('remindAt'), `<input type="time" id="s-remind" value="${d.remindTime || '20:00'}">`)}</div>
+  <h2>${t('secData')}</h2><button class="btn danger" data-act="reset">${ico('trash', 18)} ${t('reset')}</button>`;
 }
 
 // ---------- formularios ----------
@@ -489,6 +511,8 @@ const A = {
   newFav: () => favForm(), editFav: (el) => favForm(S.get().favorites.find((f) => f.id === el.dataset.id)),
   toggleHide: () => { S.setDevice({ hide: !S.device().hide }); render(); pushWidget(); },
   hideT: (el) => { S.setDevice({ hide: el.checked }); render(); pushWidget(); },
+  profile: () => withVT(() => { V.tab = 'profile'; V.sub = null; render(); window.scrollTo(0, 0); }),
+  psec: (el) => withVT(() => { V.psec = el.dataset.id; render(); }),
   rmode: (el) => withVT(() => { V.rmode = el.dataset.id; render(); }),
   yPrev: () => { V.year--; render(); }, yNext: () => { V.year++; render(); },
   bioOn: async () => { try { const id = await bioRegister(); S.setDevice({ bio: id }); render(); } catch { toast(t('bioFail')); } },
@@ -513,12 +537,18 @@ const A = {
   setPin: () => S.isEncrypted() ? toast(t('encLocked')) : simpleForm(t('pin'), fld(t('pinNew'), '<input name="p" type="password" inputmode="numeric" pattern="[0-9]{4,6}" minlength="4" maxlength="6" required>'), async (fd) => { S.setDevice({ pin: await hash(fd.get('p')) }); render(); }),
   rmPin: () => { if (S.isEncrypted()) return toast(t('encLocked')); S.setDevice({ pin: null, bio: null }); render(); },
   reset: () => { if (confirm(t('resetConfirm'))) { S.reset(); render(); } },
-  authOpen: () => authForm(),
-  skipAuth: () => { S.setDevice({ skipAuth: true }); closeModal(); },
-  saveCfg: () => { try { Cloud.saveConfig($('#cfg-text').value); S.setDevice({ skipAuth: false }); toast(t('cfgSaved')); setTimeout(() => location.reload(), 700); } catch (e) { toast(t('cfgBad', { e: e.message })); } },
+  saveCfg: () => { try { Cloud.saveConfig($('#cfg-text').value); toast(t('cfgSaved')); setTimeout(() => location.reload(), 700); } catch (e) { toast(t('cfgBad', { e: e.message })); } },
   rmCfg: () => { Cloud.clearConfig(); location.reload(); },
-  cloudBtn: () => { if (Cloud.configured() && Cloud.ready()) return authForm(); V.tab = 'more'; V.sub = 'settings'; render(); },
-  signOut: async () => { await Cloud.signOut(); render(); },
+  reload: () => location.reload(),
+  onbNext: () => { onbSave(); if (V.onb.step < 3) { V.onb.step++; renderOnb(); } else onbFinish(); },
+  onbBack: () => { onbSave(); V.onb.step--; renderOnb(); },
+  onbSkip: () => { S.update((st) => { st.settings.onboarded = true; }); onbClose(); },
+  signOut: async () => {
+    if (!confirm(t('signOutConfirm'))) return;
+    try { await Promise.race([Cloud.push(S.get()), new Promise((_, rj) => setTimeout(rj, 5000))]); } catch { if (!confirm(t('signOutLoss'))) return; }
+    try { await Cloud.signOut(); } catch {}
+    S.wipe(); S.setDevice({ owner: null, lastUser: null }); location.reload();
+  },
 };
 function favForm(f) {
   const s = S.get(), cur = f || { type: 'expense', name: '', amount: '', accountId: s.accounts[0]?.id, categoryId: '' };
@@ -595,44 +625,119 @@ function lockScreen() {
   });
 }
 
-// ---------- nube ----------
-function cloudCard(u) {
-  if (!Cloud.configured()) {
-    return `<p class="muted" style="margin-top:0">${t('cfgHelp')}</p><textarea id="cfg-text" rows="6" placeholder='apiKey: "...", authDomain: "...", projectId: "...", appId: "..."'></textarea>
-      <button class="btn" data-act="saveCfg">${ico('cloud', 18)} ${t('cfgSave')}</button><p class="sub" style="margin-bottom:0">${t('cfgSteps')}</p>`;
-  }
-  const rm = Cloud.fromFile() ? '' : `<button class="btn ghost" style="margin-top:8px" data-act="rmCfg">${t('cfgRemove')}</button>`;
-  if (u) return `<div class="row" style="gap:6px">${ico('check', 16)}${t('signedIn')}: ${esc(u.email || '')}</div><div class="muted" style="margin:6px 0">${syncText()}</div><button class="btn ghost" data-act="signOut">${t('signOut')}</button>${rm}`;
-  return `${Cloud.ready() ? '' : `<p class="exp" style="margin-top:0">${t('cfgFail')}</p>`}<button class="btn" data-act="authOpen">${t('signIn')}</button>${rm}`;
-}
-
+// ---------- acceso obligatorio (registro / inicio de sesión) ----------
 let syncState = 'off';
 const syncText = () => ({ ok: t('synced'), busy: t('syncing'), off: t('offline') }[syncState] || '');
-const syncBadge = () => (Cloud.user() ? `<small class="muted" style="font-weight:400">${ico('cloud', 14)} ${syncText()}</small>` : '');
 let pushT;
 function schedulePush() {
   if (!Cloud.user()) return;
   syncState = 'busy'; clearTimeout(pushT);
-  pushT = setTimeout(async () => { try { await Cloud.push(S.get()); syncState = 'ok'; } catch { syncState = 'off'; } if (V.tab === 'home' || V.sub === 'settings') render(); }, 1200);
+  pushT = setTimeout(async () => { try { await Cloud.push(S.get()); syncState = 'ok'; } catch { syncState = 'off'; } if (V.tab === 'profile') render(); }, 1200);
 }
-async function onUser(u) {
-  if (!u) return render();
+function authShell(inner) { const el = $('#auth'); el.hidden = false; el.innerHTML = `<div class="authwrap">${inner}</div>`; }
+const logoBig = (named) => `<div class="logo-big" ${named ? 'style="view-transition-name:logo"' : ''}>${ico('moon', 56)}</div>`;
+function authSplash() { authShell(`${logoBig()}<h1 class="c">NoxCount</h1><p class="muted c">${t('loading')}</p>`); }
+function authFail(msg) { authShell(`${logoBig()}<h1 class="c">NoxCount</h1><p class="exp c">${esc(msg)}</p><button class="btn" data-act="reload">${t('retry')}</button>`); }
+function setupScreen() {
+  authShell(`${logoBig()}<h1 class="c">${t('setupTitle')}</h1><p class="muted c">${t('setupHint')}</p><div class="card"><p class="muted" style="margin-top:0">${t('cfgHelp')}</p>
+    <textarea id="cfg-text" rows="6" placeholder='apiKey: "...", authDomain: "...", projectId: "...", appId: "..."'></textarea>
+    <button class="btn" data-act="saveCfg">${ico('cloud', 18)} ${t('cfgSave')}</button><p class="sub" style="margin-bottom:0">${t('cfgSteps')}</p></div>`);
+}
+function authErr(e) {
+  const c = Cloud.errCode(e);
+  if (['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found', 'auth/invalid-login-credentials'].includes(c)) return t('errCreds');
+  if (c === 'auth/email-already-in-use') return t('errExists');
+  if (c === 'auth/weak-password') return t('errWeak');
+  if (c === 'auth/network-request-failed') return t('errNet');
+  if (c === 'auth/operation-not-allowed') return t('errOp');
+  if (c === 'auth/unauthorized-domain') return t('errDomain');
+  if (c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request') return '';
+  return t('errGeneric') + (c ? ` (${c})` : '');
+}
+function authScreen(msg = '') {
+  V.authShown = true;
+  const mode = V.authMode || 'login', email = ($('#a-email') && $('#a-email').value) || '';
+  authShell(`${logoBig(true)}<h1 class="c">NoxCount</h1><p class="muted c">${t('loginSub')}</p>
+  <form id="af" class="card authcard" style="view-transition-name:authcard">
+    <div class="seg">${[['login', 'tabLogin'], ['signup', 'signUp']].map(([k, l]) => `<label><input type="radio" name="mode" value="${k}" ${mode === k ? 'checked' : ''}><span>${t(l)}</span></label>`).join('')}</div>
+    ${fld(t('email'), `<input id="a-email" name="e" type="email" required autocomplete="email" value="${esc(email)}">`)}
+    ${fld(t('password'), `<input name="p" type="password" minlength="6" required autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}">`)}
+    <div id="aerr" class="exp" style="min-height:1.3em">${esc(msg)}</div>
+    <button class="btn" type="submit">${mode === 'login' ? t('signIn') : t('signUp')}</button>
+    <button class="btn ghost" type="button" id="gg" style="margin-top:8px">${ico('globe', 18)} ${t('google')}</button>
+    ${mode === 'login' ? `<button class="linkb" type="button" id="fg">${t('forgot')}</button>` : ''}</form>`);
+  const f = $('#af'), err = (e) => { const a = $('#aerr'); a.className = 'exp'; a.textContent = authErr(e); }, busy = (b) => f.querySelectorAll('button').forEach((x) => { x.disabled = b; });
+  f.querySelectorAll('[name=mode]').forEach((r) => r.addEventListener('change', () => { V.authMode = r.value; authScreen(); }));
+  f.addEventListener('submit', async (e) => { e.preventDefault(); busy(true); try { await (mode === 'login' ? Cloud.signIn : Cloud.signUp)(f.e.value.trim(), f.p.value); } catch (er) { err(er); busy(false); } });
+  $('#gg').onclick = async () => { busy(true); try { await Cloud.google(); } catch (er) { err(er); busy(false); } };
+  const fg = $('#fg');
+  if (fg) fg.onclick = async () => { const em = f.e.value.trim(); if (!em) return err({ code: '' }), ($('#aerr').textContent = t('needEmail')); try { await Cloud.resetPassword(em); $('#aerr').className = 'inc'; $('#aerr').textContent = t('resetSent'); } catch (er) { err(er); } };
+}
+let entered = false;
+async function enter(u, fromLogin, offline) {
+  if (entered) return; entered = true;
+  const d = S.device();
+  let merged = false;
   try {
-    const remote = await Cloud.pull(), local = S.get();
-    if (remote && remote.updatedAt > local.updatedAt) S.replace(remote.state); else await Cloud.push(local);
-    syncState = 'ok';
-    Cloud.listen((st) => { if (st.updatedAt > S.get().updatedAt) S.replace(st); });
-  } catch { syncState = 'off'; }
-  closeModal(); render();
+    if (!offline) {
+      const remote = await Cloud.pull();
+      if (d.owner === u.uid) { if (remote && remote.updatedAt > S.get().updatedAt) S.replace(remote.state); else await Cloud.push(S.get()); }
+      else if (!d.owner) { // datos de este dispositivo anteriores al registro
+        if (remote) { if (S.hasData()) { S.replace(S.merge(remote.state, S.get())); merged = true; } else S.replace(remote.state); }
+        else merged = S.hasData();
+        await Cloud.push(S.get());
+      } else { S.wipe(); if (remote) S.replace(remote.state); } // otra cuenta usó antes este dispositivo
+      syncState = 'ok';
+      Cloud.listen((st) => { if (st.updatedAt > S.get().updatedAt) S.replace(st); });
+    }
+  } catch (e) {
+    if (d.owner !== u.uid) { entered = false; try { await Cloud.signOut(); } catch {} return authScreen(t('errNet')); }
+    syncState = 'off';
+  }
+  S.setDevice({ owner: u.uid, lastUser: { uid: u.uid, email: u.email } });
+  showDashboard(fromLogin && V.authShown, merged);
 }
-function authForm() {
-  modal(`<h1>${ico('cloud', 22)} ${t('cloud')}</h1><form id="af">${fld(t('email'), '<input name="e" type="email" required autocomplete="email">')}${fld(t('password'), '<input name="p" type="password" minlength="6" required autocomplete="current-password">')}
-  <button class="btn" type="submit">${t('signIn')}</button><button class="btn ghost" type="button" id="su" style="margin-top:8px">${t('signUp')}</button><button class="btn ghost" type="button" id="gg" style="margin-top:8px">${t('google')}</button><button class="btn ghost" type="button" data-act="skipAuth" style="margin-top:8px">${t('skip')}</button></form><div id="aerr" class="exp"></div>`, (m) => {
-    const run = (fn) => async () => { try { const f = $('#af', m); await fn(f.e.value, f.p.value); } catch (e) { $('#aerr', m).textContent = e.message; } };
-    $('#af', m).addEventListener('submit', (e) => { e.preventDefault(); run(Cloud.signIn)(); });
-    $('#su', m).onclick = run(Cloud.signUp);
-    $('#gg', m).onclick = async () => { try { await Cloud.google(); } catch (e) { $('#aerr', m).textContent = e.message; } };
+function showDashboard(anim, merged) {
+  const go = () => { const a = $('#auth'); a.hidden = true; a.innerHTML = ''; V.tab = 'home'; V.sub = null; S.runRecurring(); render(); };
+  if (anim && !reduced() && document.startViewTransition) { V.vtLogin = true; document.startViewTransition(go).finished.finally(() => { V.vtLogin = false; render(); }); } else go();
+  startupNotices(); checkReminder(); setInterval(checkReminder, 60000); pushWidget();
+  if (merged) setTimeout(() => toast(t('merged')), 700);
+  if (!S.get().settings.onboarded) setTimeout(onboarding, anim ? 900 : 100);
+}
+function onUser(u) { if (u) enter(u, true, false); else if (!entered) authScreen(); }
+
+// ---------- guía inicial de 3 pasos ----------
+function onboarding() { V.onb = { step: 1, income: S.get().settings.income || '', bal: {} }; renderOnb(); }
+function onbSave() {
+  const o = V.onb, inc = $('#onb-inc'); if (inc) o.income = inc.value;
+  document.querySelectorAll('[data-obal]').forEach((i) => { o.bal[i.dataset.obal] = i.value; });
+}
+function renderOnb() {
+  const o = V.onb, el = $('#onb'), st = S.get(), base = S.baseCur();
+  let body = '';
+  if (o.step === 1) body = `<h1>${t('onbIncomeQ')}</h1><p class="muted">${t('onbIncomeHint')}</p><input id="onb-inc" class="bigin" type="text" inputmode="decimal" autocomplete="off" placeholder="0" value="${esc(o.income)}"><div class="muted" style="margin-bottom:14px">${base}</div>`;
+  if (o.step === 2) body = `<h1>${t('onbAccQ')}</h1><p class="muted">${t('onbAccHint')}</p>${st.accounts.map((a) => `<label>${esc(accName(a))} (${a.currency || base})<input data-obal="${a.id}" type="number" step="0.01" inputmode="decimal" value="${o.bal[a.id] ?? (a.initial || '')}" placeholder="0"></label>`).join('')}`;
+  if (o.step === 3) body = `<h1>${t('onbPlanQ')}</h1><p class="muted">${t('onbPlanHint')}</p><div class="card" style="margin-bottom:14px">${planPreview(calcNum(o.income))}</div>`;
+  const dots = [1, 2, 3].map((n) => `<i class="${n === o.step ? 'on' : ''}"></i>`).join('');
+  el.hidden = false;
+  el.innerHTML = `<div class="sheet onb"><div class="row sp"><span class="sub">${t('onbOf', { n: o.step })}</span><button class="linkb" data-act="onbSkip">${t('skip')}</button></div><div class="dots">${dots}</div>${body}
+    <div class="row" style="gap:8px">${o.step > 1 ? `<button class="btn ghost" data-act="onbBack">${t('backB')}</button>` : ''}<button class="btn" data-act="onbNext">${o.step === 3 ? t('start') : t('next')}</button></div></div>`;
+  const first = el.querySelector('input'); if (first && !reduced()) first.focus({ preventScroll: true });
+}
+function onbClose() { const el = $('#onb'); el.hidden = true; el.innerHTML = ''; render(); }
+function onbFinish() {
+  const o = V.onb, income = calcNum(o.income), r = S.get().settings.rule;
+  S.update((s) => {
+    s.accounts.forEach((a) => { const v = o.bal[a.id]; if (v !== undefined && v !== '') a.initial = num(v); });
+    if (income > 0) {
+      s.settings.income = income;
+      const c = planCalc(income, r);
+      [...c.needs.items, ...c.wants.items].forEach((i) => { if (i.amount > 0) s.budgets[i.id] = i.amount; });
+      if (c.savings > 0 && !s.goals.some((g) => g.auto)) s.goals.push({ id: S.uid(), name: t('goalMonthly'), target: Math.round(c.savings * 12), saved: 0, auto: true });
+    }
+    s.settings.onboarded = true;
   });
+  onbClose(); if (income > 0) toast(t('planApplied'));
 }
 
 // ---------- avisos al abrir ----------
@@ -691,17 +796,15 @@ document.addEventListener('change', (e) => {
   else if (e.target.dataset.rate) S.update((s) => { const v = parseFloat(e.target.value); v > 0 ? (s.settings.rates[e.target.dataset.rate] = v) : delete s.settings.rates[e.target.dataset.rate]; });
   else if (e.target.dataset.act === 'notif') A.notif(e.target);
 });
-S.subscribe(() => { if ($('#modal').hidden && $('#lock').hidden) render(); pushWidget(); });
+S.subscribe(() => { if ($('#modal').hidden && $('#lock').hidden && $('#auth').hidden && $('#onb').hidden) render(); pushWidget(); });
 S.onSave(schedulePush);
 
 setLang(S.device().lang || ((navigator.language || 'es').startsWith('en') ? 'en' : 'es'));
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 (async () => {
   await lockScreen();
-  S.runRecurring();
-  render();
-  startupNotices();
-  checkReminder(); setInterval(checkReminder, 60000);
-  pushWidget();
-  Cloud.init(onUser).then((ok) => { if (ok && !Cloud.user() && !S.device().skipAuth) authForm(); else if (!ok && Cloud.configured()) render(); });
+  if (!Cloud.configured()) return setupScreen();
+  authSplash();
+  const ok = await Cloud.init(onUser);
+  if (!ok) { const last = S.device().lastUser; if (last && S.device().owner === last.uid) enter(last, false, true); else authFail(`${t('needConn')} ${t('cfgFail')}`); }
 })();

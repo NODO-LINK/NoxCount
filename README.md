@@ -12,6 +12,19 @@ App web instalable (PWA) para controlar tus **ingresos y egresos**. Funciona sin
 - Filtro por fecha, PIN de bloqueo, notificaciones (pagos próximos, presupuesto excedido, resumen semanal).
 - Login (correo/contraseña o Google) y sincronización con Firebase; offline-first.
 
+## Registro obligatorio y navegación simplificada (v4)
+- **Para entrar al dashboard hay que registrarse** (correo + contraseña o Google). Si ya hay sesión, entra directo; sin conexión entra con los datos guardados de la última sesión.
+- Al iniciar sesión, el logo y la tarjeta del formulario viajan hasta el encabezado y la tarjeta del saldo (transición de elemento compartido).
+- Los datos que alguien ya tenía en el dispositivo antes de registrarse se pasan a su cuenta. Cerrar sesión borra los datos locales (siguen en la nube).
+- **Guía inicial de 3 pasos** tras el primer registro: cuánto cobras → cuánto tienes en cada cuenta → plan 50/30/20 aplicado.
+- **Dónde está cada cosa**
+  - *Inicio*: saldo, disponible para gastar, ingresos/egresos del mes, favoritos y últimos movimientos.
+  - *Movimientos*: lista, búsqueda y filtro por fecha.
+  - *+*: nuevo movimiento (monto, voz, recibo).
+  - *Planificar*: **Presupuesto** (calculadora por ingreso mensual y presupuestos por categoría) · **Metas** · **Pagos y deudas** (recurrentes y deudas).
+  - *Reportes*: resumen, proyección, gráficos, mensual/anual y PDF.
+  - *Perfil* (botón arriba a la derecha): **Mi dinero** (cuentas, categorías, favoritos) y **Ajustes** en 4 secciones: Cuenta · Seguridad · Preferencias · Datos.
+
 ## Diseño y calculadora de presupuesto (v3)
 - Íconos vectoriales SVG (`js/icons.js`) en lugar de emojis; las categorías propias eligen su ícono de una cuadrícula. Los datos antiguos con emojis se migran solos.
 - Fondo con shader WebGL (`js/shader.js`): brillo amarillo muy sutil sobre negro, a baja resolución y ~30 fps. Se pausa con la pestaña oculta y respeta "reducir movimiento" (queda un cuadro fijo).

@@ -55,3 +55,6 @@ export function listen(cb) {
   if (unsub) unsub();
   unsub = ref().onSnapshot((snap) => { if (snap.exists && !snap.metadata.hasPendingWrites) cb(JSON.parse(snap.data().data)); });
 }
+
+export const resetPassword = (email) => auth.sendPasswordResetEmail(email);
+export const errCode = (e) => (e && e.code) || '';
