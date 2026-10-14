@@ -12,6 +12,27 @@ App web instalable (PWA) para controlar tus **ingresos y egresos**. Funciona sin
 - Filtro por fecha, PIN de bloqueo, notificaciones (pagos próximos, presupuesto excedido, resumen semanal).
 - Login (correo/contraseña o Google) y sincronización con Firebase; offline-first.
 
+## Funciones añadidas (v2)
+- Búsqueda por texto, monto y #etiqueta · "Deshacer" al borrar · favoritos de un toque en Inicio.
+- Calculadora en el monto (`12.5*3`) · registro por voz 🎤 (navegadores con reconocimiento de voz, p. ej. Chrome).
+- Varias monedas: cada cuenta tiene su moneda, tipos de cambio manuales en Ajustes y totales en tu moneda base. Transferencias entre monedas piden el monto recibido.
+- Reportes: por etiqueta, por cuenta, mayores gastos, **reporte anual**, gráficos interactivos (toca una barra, rebanada o punto).
+- Inicio: proyección de fin de mes, gasto diario promedio y días que te alcanza el saldo.
+- Ocultar saldos 👁️ · recordatorio diario · PIN, huella/Face ID y **cifrado de datos** (AES-GCM, clave derivada del PIN).
+  - Con cifrado activo el PIN es obligatorio en cada apertura y la huella se desactiva (la huella no puede entregar la clave). **Si olvidas el PIN, no hay forma de recuperar los datos.** La copia en la nube (Firebase) no está cifrada.
+
+## App Android con widget
+El widget (saldo total e ingresos/egresos del mes, toca para abrir) es nativo de Android, así que la app se empaqueta con Capacitor (`android/`).
+```bash
+npm install
+npm run android:sync     # copia la web a www/ y sincroniza con Android
+npm run android:open     # abre Android Studio  (o:  npm run android:apk)
+```
+Requiere Android Studio / JDK 17 + Android SDK. En GitHub, el workflow `Android APK` compila un APK de depuración en cada push (descárgalo de *Actions → Artifacts*). Para agregar el widget: mantén presionada la pantalla de inicio → Widgets → NoxCount.
+- El widget se actualiza cada vez que abres o cambias datos en la app (y cada 30 min como mínimo). Con saldos ocultos o cifrado activo muestra `••••••`.
+- Limitaciones dentro del WebView de Android: el botón de voz y la huella (WebAuthn) pueden no estar disponibles, y el login con Google (popup) no funciona; usa correo/contraseña.
+- No hay widget para iPhone (requeriría una app nativa de iOS en Swift).
+
 ## Ejecutar
 No requiere compilar:
 ```bash

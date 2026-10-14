@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">NoxCount</string>
+    <string name="title_activity_main">NoxCount</string>
+    <string name="package_name">app.noxcount</string>
+    <string name="custom_url_scheme">app.noxcount</string>
+    <string name="widget_description">Saldo total e ingresos/egresos del mes</string>
+</resources>
