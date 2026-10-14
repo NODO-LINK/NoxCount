@@ -2,6 +2,6 @@
   "appId": "app.noxcount",
   "appName": "NoxCount",
   "webDir": "www",
-  "backgroundColor": "#0b0d1a",
+  "backgroundColor": "#000000",
   "android": { "allowMixedContent": false }
 }

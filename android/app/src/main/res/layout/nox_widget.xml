@@ -16,14 +16,14 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="🌙 NoxCount"
-            android:textColor="#8B7BFF"
+            android:textColor="#FFD60A"
             android:textSize="13sp"
             android:textStyle="bold" />
         <TextView
             android:id="@+id/w_month"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#8B90B0"
+            android:textColor="#A3A3A3"
             android:textSize="11sp" />
     </LinearLayout>
 
@@ -32,7 +32,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:textColor="#E8EAF6"
+        android:textColor="#FFFFFF"
         android:textSize="26sp"
         android:textStyle="bold"
         android:maxLines="1" />
@@ -47,7 +47,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textColor="#3DDC97"
+            android:textColor="#FFD60A"
             android:textSize="13sp"
             android:maxLines="1" />
         <TextView
@@ -55,7 +55,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textColor="#FF6B81"
+            android:textColor="#FFFFFF"
             android:textSize="13sp"
             android:maxLines="1" />
     </LinearLayout>

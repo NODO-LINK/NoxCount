@@ -1,5 +1,5 @@
 // Gráficos SVG sin dependencias
-export const PALETTE = ['#8b7bff', '#3ddc97', '#ffb454', '#4dc3ff', '#ff6b81', '#c58bff', '#7be0d6', '#f2e36b', '#9aa3c7'];
+export const PALETTE = ['#FFD60A', '#FFFFFF', '#B38F00', '#D9D9D9', '#FFE766', '#8C8C8C', '#7A6200', '#F2F2F2', '#5C5C5C'];
 
 export function donut(data, id = 'd') {
   const total = data.reduce((a, d) => a + d.value, 0);
