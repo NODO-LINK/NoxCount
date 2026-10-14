@@ -136,7 +136,7 @@ function home() {
   const delta = p7 ? `${d7 >= p7 ? '+' : ''}${Math.round(((d7 - p7) / p7) * 100)}%` : '—';
   const due = dueList();
   const favs = s.favorites.length ? `<div class="chips">${s.favorites.map((f) => `<button class="chip" data-act="favTx" data-id="${f.id}">${ico(catById(f.categoryId)?.icon || 'star', 16)} ${esc(f.name)} <b class="${cls(f.type)}">${M(f.amount, S.accCur(f.accountId))}</b></button>`).join('')}</div>` : '';
-  return `<div class="row sp"><h1>NoxCount ${syncBadge()}</h1><button class="eye" data-act="toggleHide" aria-label="${t('hide')}">${ico(S.device().hide ? 'eyeoff' : 'eye', 22)}</button></div>
+  return `<div class="row sp"><h1>NoxCount ${syncBadge()}</h1><span class="row" style="gap:2px">${Cloud.user() ? '' : `<button class="chip" data-act="cloudBtn">${ico('cloud', 16)} ${Cloud.configured() ? t('signIn') : t('localMode')}</button>`}<button class="eye" data-act="toggleHide" aria-label="${t('hide')}">${ico(S.device().hide ? 'eyeoff' : 'eye', 22)}</button></span></div>
   <div class="card hero"><div class="muted">${t('balance')} · ${S.baseCur()}</div><div class="big" data-count="${S.totalBalance()}" data-cur="${S.baseCur()}">${M(S.totalBalance())}</div></div>
   ${availCard()}
   ${favs}
@@ -297,7 +297,7 @@ function more() {
     ${bioOk ? `<button class="btn ghost" style="margin-top:8px" data-act="${d.bio ? 'bioOff' : 'bioOn'}">${d.bio ? t('bioRemove') : t('bioSet')}</button>` : ''}</div>
     <h2>${t('encrypt')}</h2><div class="card"><p class="muted" style="margin-top:0">${t('encWarn')}</p>${enc ? `<div class="row" style="margin-bottom:8px;gap:6px">${ico("check", 16)}${t("encActive")}</div><button class="btn danger" data-act="encOff">${t('encOff')}</button>` : d.pin ? `<button class="btn ghost" data-act="encOn">${t('encOn')}</button>` : `<span class="muted">${t('needPin')}</span>`}</div>
     <h2>${t('notifs')}</h2><div class="card">${tg('due', t('nDue'))}${tg('budget', t('nBudget'))}${tg('summary', t('nSummary'))}${tg('remind', t('remind'))}${fld(t('remindAt'), `<input type="time" id="s-remind" value="${d.remindTime || '20:00'}">`)}</div>
-    <h2>${t('cloud')}</h2><div class="card">${!Cloud.configured() ? `<span class="muted">${t('cloudOff')}</span>` : u ? `<div>${esc(u.email || '')}</div><div class="muted" style="margin:6px 0">${syncText()}</div><button class="btn ghost" data-act="signOut">${t('signOut')}</button>` : `<button class="btn" data-act="authOpen">${t('signIn')}</button>`}</div>
+    <h2>${t('cloud')}</h2><div class="card">${cloudCard(u)}</div>
     <h2></h2><button class="btn danger" data-act="reset">${t('reset')}</button>`;
   }
   return '';
@@ -514,6 +514,10 @@ const A = {
   rmPin: () => { if (S.isEncrypted()) return toast(t('encLocked')); S.setDevice({ pin: null, bio: null }); render(); },
   reset: () => { if (confirm(t('resetConfirm'))) { S.reset(); render(); } },
   authOpen: () => authForm(),
+  skipAuth: () => { S.setDevice({ skipAuth: true }); closeModal(); },
+  saveCfg: () => { try { Cloud.saveConfig($('#cfg-text').value); S.setDevice({ skipAuth: false }); toast(t('cfgSaved')); setTimeout(() => location.reload(), 700); } catch (e) { toast(t('cfgBad', { e: e.message })); } },
+  rmCfg: () => { Cloud.clearConfig(); location.reload(); },
+  cloudBtn: () => { if (Cloud.configured() && Cloud.ready()) return authForm(); V.tab = 'more'; V.sub = 'settings'; render(); },
   signOut: async () => { await Cloud.signOut(); render(); },
 };
 function favForm(f) {
@@ -592,6 +596,16 @@ function lockScreen() {
 }
 
 // ---------- nube ----------
+function cloudCard(u) {
+  if (!Cloud.configured()) {
+    return `<p class="muted" style="margin-top:0">${t('cfgHelp')}</p><textarea id="cfg-text" rows="6" placeholder='apiKey: "...", authDomain: "...", projectId: "...", appId: "..."'></textarea>
+      <button class="btn" data-act="saveCfg">${ico('cloud', 18)} ${t('cfgSave')}</button><p class="sub" style="margin-bottom:0">${t('cfgSteps')}</p>`;
+  }
+  const rm = Cloud.fromFile() ? '' : `<button class="btn ghost" style="margin-top:8px" data-act="rmCfg">${t('cfgRemove')}</button>`;
+  if (u) return `<div class="row" style="gap:6px">${ico('check', 16)}${t('signedIn')}: ${esc(u.email || '')}</div><div class="muted" style="margin:6px 0">${syncText()}</div><button class="btn ghost" data-act="signOut">${t('signOut')}</button>${rm}`;
+  return `${Cloud.ready() ? '' : `<p class="exp" style="margin-top:0">${t('cfgFail')}</p>`}<button class="btn" data-act="authOpen">${t('signIn')}</button>${rm}`;
+}
+
 let syncState = 'off';
 const syncText = () => ({ ok: t('synced'), busy: t('syncing'), off: t('offline') }[syncState] || '');
 const syncBadge = () => (Cloud.user() ? `<small class="muted" style="font-weight:400">${ico('cloud', 14)} ${syncText()}</small>` : '');
@@ -613,7 +627,7 @@ async function onUser(u) {
 }
 function authForm() {
   modal(`<h1>${ico('cloud', 22)} ${t('cloud')}</h1><form id="af">${fld(t('email'), '<input name="e" type="email" required autocomplete="email">')}${fld(t('password'), '<input name="p" type="password" minlength="6" required autocomplete="current-password">')}
-  <button class="btn" type="submit">${t('signIn')}</button><button class="btn ghost" type="button" id="su" style="margin-top:8px">${t('signUp')}</button><button class="btn ghost" type="button" id="gg" style="margin-top:8px">${t('google')}</button><button class="btn ghost" type="button" data-act="close" style="margin-top:8px">${t('skip')}</button></form><div id="aerr" class="exp"></div>`, (m) => {
+  <button class="btn" type="submit">${t('signIn')}</button><button class="btn ghost" type="button" id="su" style="margin-top:8px">${t('signUp')}</button><button class="btn ghost" type="button" id="gg" style="margin-top:8px">${t('google')}</button><button class="btn ghost" type="button" data-act="skipAuth" style="margin-top:8px">${t('skip')}</button></form><div id="aerr" class="exp"></div>`, (m) => {
     const run = (fn) => async () => { try { const f = $('#af', m); await fn(f.e.value, f.p.value); } catch (e) { $('#aerr', m).textContent = e.message; } };
     $('#af', m).addEventListener('submit', (e) => { e.preventDefault(); run(Cloud.signIn)(); });
     $('#su', m).onclick = run(Cloud.signUp);
@@ -689,5 +703,5 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) naviga
   startupNotices();
   checkReminder(); setInterval(checkReminder, 60000);
   pushWidget();
-  Cloud.init(onUser).then((ok) => { if (ok && !Cloud.user() && !S.device().skipAuth) { authForm(); S.setDevice({ skipAuth: true }); } });
+  Cloud.init(onUser).then((ok) => { if (ok && !Cloud.user() && !S.device().skipAuth) authForm(); else if (!ok && Cloud.configured()) render(); });
 })();

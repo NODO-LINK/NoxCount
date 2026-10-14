@@ -49,7 +49,7 @@ Abre http://localhost:8080. En el celular, "Agregar a pantalla de inicio" para i
 ## Activar login y nube (Firebase)
 1. Crea un proyecto en https://console.firebase.google.com y agrega una app **Web**.
 2. Activa **Authentication** (Correo/contraseña y Google) y **Firestore**.
-3. Pega la configuración en `firebase-config.js` (`window.NOX_FIREBASE = {...}`).
+3. Pega la configuración (`firebaseConfig`) **dentro de la app**: Inicio → *Modo local* (o Más → Ajustes → Nube y cuenta) → pegar → *Guardar y activar*. Queda guardada en ese dispositivo. Alternativa para que valga para todos los usuarios del sitio: ponla en `firebase-config.js` (`window.NOX_FIREBASE = {...}`) y vuelve a publicar.
 4. Reglas de Firestore: copia el contenido de [`firestore.rules`](firestore.rules) en Firestore → Reglas → Publicar (cada usuario solo puede leer y escribir `users/{su uid}`, con validación de formato y tamaño).
 5. Agrega tu dominio en Authentication → Configuración → Dominios autorizados.
 

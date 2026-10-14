@@ -2,7 +2,25 @@
 const V = '10.12.2';
 const SRC = [`https://www.gstatic.com/firebasejs/${V}/firebase-app-compat.js`, `https://www.gstatic.com/firebasejs/${V}/firebase-auth-compat.js`, `https://www.gstatic.com/firebasejs/${V}/firebase-firestore-compat.js`];
 let fb = null, auth = null, db = null, unsub = null;
-export const configured = () => !!window.NOX_FIREBASE;
+// La configuración puede venir de firebase-config.js o pegada por el usuario dentro de la app (se guarda en este dispositivo).
+const LS = 'noxcount.fbconfig';
+const stored = () => { try { return JSON.parse(localStorage.getItem(LS)); } catch { return null; } };
+export const cfg = () => window.NOX_FIREBASE || stored();
+export const configured = () => !!cfg();
+export const fromFile = () => !!window.NOX_FIREBASE;
+export const ready = () => !!auth;
+export const clearConfig = () => { try { localStorage.removeItem(LS); } catch {} };
+// acepta JSON o el objeto de la consola de Firebase (const firebaseConfig = { apiKey: "...", ... })
+export function saveConfig(text) {
+  const o = {};
+  for (const m of String(text).matchAll(/["']?(\w+)["']?\s*[:=]\s*["']([^"']*)["']/g)) o[m[1]] = m[2];
+  const need = ['apiKey', 'authDomain', 'projectId', 'appId'].filter((k) => !o[k]);
+  if (need.length) throw new Error('Falta: ' + need.join(', '));
+  const keep = ['apiKey', 'authDomain', 'projectId', 'appId', 'storageBucket', 'messagingSenderId', 'measurementId'];
+  const clean = Object.fromEntries(keep.filter((k) => o[k]).map((k) => [k, o[k]]));
+  localStorage.setItem(LS, JSON.stringify(clean));
+  return clean;
+}
 const load = (src) => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('No se pudo cargar ' + src)); document.head.appendChild(s); });
 
 export async function init(onUser) {
@@ -10,7 +28,7 @@ export async function init(onUser) {
   try {
     for (const s of SRC) await load(s);
     fb = window.firebase;
-    fb.initializeApp(window.NOX_FIREBASE);
+    fb.initializeApp(cfg());
     auth = fb.auth();
     db = fb.firestore();
     try { await db.enablePersistence({ synchronizeTabs: true }); } catch {}
