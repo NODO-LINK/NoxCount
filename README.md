@@ -21,7 +21,7 @@ App web instalable (PWA) para controlar tus **ingresos y egresos**. Funciona sin
   - *Inicio*: saldo, disponible para gastar, ingresos/egresos del mes, favoritos y últimos movimientos.
   - *Movimientos*: lista, búsqueda y filtro por fecha.
   - *+*: nuevo movimiento (monto, voz, recibo).
-  - *Planificar*: **Presupuesto** (límite mensual por categoría) · **Metas** · **Pagos y deudas** (recurrentes y deudas).
+  - *Planificar*: **Presupuesto** (límite mensual por categoría) · **Metas** · **Pagos y deudas** (recurrentes y deudas con **abonos**: cada abono mueve el saldo de la cuenta elegida —egreso si debes, ingreso si te deben—, con barra de avance, lo pagado y lo que falta).
   - *Reportes*: resumen, proyección, gráficos, mensual/anual y PDF.
   - *Perfil* (botón arriba a la derecha): **Mi dinero** (cuentas, categorías, favoritos) y **Ajustes** en 4 secciones: Cuenta · Seguridad · Preferencias · Datos.
 
